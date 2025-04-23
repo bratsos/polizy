@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "../node_modules/@synopsisapp/symbiosis-ui/src/tailwind.css"
+  layer(theme);
+
+@source "../node_modules/@synopsisapp/symbiosis-ui";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+@theme {
+  --color-main-light-400: #e7e7e9;
+  --color-main-light-300: #ceced4;
+  --color-main-light-200: #6e6e7c;
+  --color-main-light-100: #43434c;
+  --color-main-base: #323239;
+  --color-main-dark-100: #26262b;
+  --color-main-dark-200: #26262b;
+  --color-main-dark-300: #26262b;
+  --color-main-dark-400: #111113;
+  --color-main-dark-500: #111113;
+}

@@ -1,0 +1,23 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+    provider = "prisma-client-js"
+  output   = "./client-generated"
+}
+
+model PolizyTuple {
+  id          String @id @default(cuid())
+  subjectType String
+  subjectId   String
+  relation    String
+  objectType  String
+  objectId    String
+  condition   Json?
+
+  @@index([subjectType, subjectId, relation])
+  @@index([objectType, objectId, relation])
+  @@index([subjectType, subjectId, relation, objectType, objectId], name: "full_tuple_index")
+}

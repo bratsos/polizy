@@ -1,0 +1,35 @@
+# Dependency directories
+node_modules
+.pnpm-store/
+
+# Build output directories (based on tsconfig)
+packages/*/dist/
+examples/*/dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+*-debug.log*
+*-error.log*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Prisma related
+client-generated
+dev.db

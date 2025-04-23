@@ -1,0 +1,47 @@
+{
+  "name": "example-app1",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "react-router dev",
+    "start": "react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc",
+    "db:seed": "node --import tsx ./app/lib/seed-runner.ts",
+    "db:reset": "prisma db push --force-reset && pnpm db:seed",
+    "start:pm2": "pm2 start ecosystem.config.cjs --no-daemon"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "@react-router/node": "^7.4.1",
+    "@react-router/serve": "^7.4.1",
+    "@synopsisapp/symbiosis-ui": "^0.3.2",
+    "isbot": "^5.1.25",
+    "node-cron": "^3.0.3",
+    "pm2": "^6.0.5",
+    "polizy": "workspace:*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router": "^7.4.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^7.4.1",
+    "@tailwindcss/vite": "^4.1.1",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^16.4.7",
+    "prisma": "^6.5.0",
+    "react-router-devtools": "^1.1.8",
+    "tailwindcss": "^4.1.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.4",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}

@@ -1,0 +1,47 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-generated"
+}
+
+model PolizyTuple {
+  id String @id @default(uuid()) // Unique ID for the tuple
+
+  subjectType String // Type of the subject (e.g., 'user', 'team')
+  subjectId   String // ID of the subject (e.g., 'alice', 'team-alpha')
+  relation    String // Relation between subject and object (e.g., 'owner', 'member')
+  objectType  String // Type of the object (e.g., 'document', 'folder')
+  objectId    String // ID of the object (e.g., 'doc1', 'folder-a')
+  condition   Json? // Optional JSON field for conditions (ABAC)
+
+  createdAt DateTime @default(now()) // Timestamp of when the tuple was created
+
+  @@unique([subjectType, subjectId, relation, objectType, objectId])
+  @@index([subjectType, subjectId, relation]) // Find objects for a subject+relation
+  @@index([objectType, objectId, relation]) // Find subjects for an object+relation
+}
+
+model User {
+  id   String @id @default(uuid())
+  name String
+}
+
+model Document {
+  id      String  @id @default(uuid())
+  title   String
+  content String?
+}
+
+model Folder {
+  id   String @id @default(uuid())
+  name String
+}
+
+model Team {
+  id   String @id @default(uuid())
+  name String
+}
