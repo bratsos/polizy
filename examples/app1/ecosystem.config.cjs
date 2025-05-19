@@ -2,12 +2,12 @@ module.exports = {
   apps: [
     {
       name: "app1-server",
-      script: "npx", // Use npx to potentially resolve path issues
-      args: "react-router dev", // Run the command directly
+      script: "pnpm",
+      args: "start",
       cwd: __dirname,
       watch: false,
       env: {
-        NODE_ENV: "development", // Ensure development environment for dev server
+        NODE_ENV: "production",
       },
     },
     {
@@ -16,9 +16,9 @@ module.exports = {
       cwd: __dirname,
       watch: false,
       interpreter: "node",
-      node_args: "-r dotenv/config", // Load .env file before running the script
+      node_args: "-r dotenv/config",
       env: {
-        NODE_ENV: "production", // Or 'development' depending on context
+        NODE_ENV: "production",
       },
     },
   ],
