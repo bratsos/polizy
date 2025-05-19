@@ -10,7 +10,8 @@
     "typecheck": "react-router typegen && tsc",
     "db:seed": "node --import tsx ./app/lib/seed-runner.ts",
     "db:reset": "prisma db push --force-reset && pnpm db:seed",
-    "start:pm2": "pm2 start ecosystem.config.cjs --no-daemon"
+    "start:pm2": "pm2 start ecosystem.config.cjs --no-daemon",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
