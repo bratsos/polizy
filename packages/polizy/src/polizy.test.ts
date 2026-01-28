@@ -887,4 +887,132 @@ describe("AuthSystem Core Tests", () => {
       });
     });
   });
+
+  describe("listTuples", () => {
+    const schema = defineSchema({
+      relations: {
+        member: { type: "group" },
+        viewer: { type: "direct" },
+        editor: { type: "direct" },
+        owner: { type: "direct" },
+      },
+      actionToRelations: {
+        view: ["viewer", "editor", "owner"],
+        edit: ["editor", "owner"],
+        delete: ["owner"],
+      },
+    });
+    let authSystem: AuthSystem<typeof schema>;
+
+    beforeEach(async () => {
+      authSystem = new AuthSystem({ storage, schema });
+
+      // Set up test data with multiple tuples
+      // Alice: viewer on doc1, editor on doc2
+      await authSystem.allow({
+        who: { type: "user", id: "alice" },
+        toBe: "viewer",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      await authSystem.allow({
+        who: { type: "user", id: "alice" },
+        toBe: "editor",
+        onWhat: { type: "doc", id: "doc2" },
+      });
+
+      // Bob: editor on doc1, owner on doc3
+      await authSystem.allow({
+        who: { type: "user", id: "bob" },
+        toBe: "editor",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      await authSystem.allow({
+        who: { type: "user", id: "bob" },
+        toBe: "owner",
+        onWhat: { type: "doc", id: "doc3" },
+      });
+
+      // Charlie: member of devs group
+      await authSystem.addMember({
+        member: { type: "user", id: "charlie" },
+        group: { type: "group", id: "devs" },
+      });
+
+      // Group devs: viewer on doc3
+      await authSystem.allow({
+        who: { type: "group", id: "devs" },
+        toBe: "viewer",
+        onWhat: { type: "doc", id: "doc3" },
+      });
+    });
+
+    it("should list all tuples when no filter provided", async () => {
+      const tuples = await authSystem.listTuples({});
+      // alice:viewer:doc1, alice:editor:doc2, bob:editor:doc1, bob:owner:doc3,
+      // charlie:member:devs, devs:viewer:doc3
+      assert.strictEqual(tuples.length, 6);
+    });
+
+    it("should filter by subject", async () => {
+      const tuples = await authSystem.listTuples({
+        subject: { type: "user", id: "alice" },
+      });
+      assert.strictEqual(tuples.length, 2);
+      assert.ok(
+        tuples.every(
+          (t) => t.subject.type === "user" && t.subject.id === "alice",
+        ),
+      );
+    });
+
+    it("should filter by relation", async () => {
+      const tuples = await authSystem.listTuples({
+        relation: "editor",
+      });
+      assert.strictEqual(tuples.length, 2);
+      assert.ok(tuples.every((t) => t.relation === "editor"));
+    });
+
+    it("should filter by object", async () => {
+      const tuples = await authSystem.listTuples({
+        object: { type: "doc", id: "doc1" },
+      });
+      assert.strictEqual(tuples.length, 2);
+      assert.ok(
+        tuples.every(
+          (t) => t.object.type === "doc" && t.object.id === "doc1",
+        ),
+      );
+    });
+
+    it("should apply pagination with limit", async () => {
+      const tuples = await authSystem.listTuples({}, { limit: 2 });
+      assert.strictEqual(tuples.length, 2);
+    });
+
+    it("should apply pagination with offset", async () => {
+      const allTuples = await authSystem.listTuples({});
+      const offsetTuples = await authSystem.listTuples({}, { offset: 2 });
+      assert.strictEqual(offsetTuples.length, allTuples.length - 2);
+      assert.deepStrictEqual(offsetTuples, allTuples.slice(2));
+    });
+
+    it("should apply pagination with limit and offset", async () => {
+      const allTuples = await authSystem.listTuples({});
+      const paginatedTuples = await authSystem.listTuples(
+        {},
+        { limit: 2, offset: 1 },
+      );
+      assert.strictEqual(paginatedTuples.length, 2);
+      assert.deepStrictEqual(paginatedTuples, allTuples.slice(1, 3));
+    });
+
+    it("should return empty array when no matches", async () => {
+      const tuples = await authSystem.listTuples({
+        subject: { type: "user", id: "nonexistent" },
+      });
+      assert.strictEqual(tuples.length, 0);
+      assert.deepStrictEqual(tuples, []);
+    });
+  });
 });
