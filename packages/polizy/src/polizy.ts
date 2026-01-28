@@ -16,8 +16,13 @@ import type {
   AccessibleObject,
   TypedObject,
   RelationDefinition,
+  Logger,
 } from "./types.ts";
 import { ConfigurationError, SchemaError } from "./errors.ts";
+
+const defaultLogger: Logger = {
+  warn: (msg: string) => console.warn(msg),
+};
 
 const createCacheKey = (
   s: Subject<any> | AnyObject<any>,
@@ -36,12 +41,14 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   private readonly schema: S;
   private readonly defaultCheckDepth: number;
   private readonly fieldSeparator: string;
+  private readonly logger: Logger;
 
   constructor(config: {
     storage: StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>;
     schema: S;
     defaultCheckDepth?: number;
     fieldSeparator?: string;
+    logger?: Logger;
   }) {
     if (!config.storage)
       throw new ConfigurationError("Storage adapter is required.");
@@ -52,6 +59,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     this.schema = config.schema;
     this.defaultCheckDepth = config.defaultCheckDepth ?? 10;
     this.fieldSeparator = config.fieldSeparator ?? "#";
+    this.logger = config.logger ?? defaultLogger;
   }
 
   async writeTuple(
@@ -93,7 +101,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     onWhat?: AnyObject<SchemaObjectTypes<S>>;
   }): Promise<number> {
     if (!filter.who && !filter.was && !filter.onWhat) {
-      console.warn(
+      this.logger.warn(
         "deleteTuple called with an empty filter. No tuples were deleted.",
       );
 
@@ -125,7 +133,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       return false;
     }
     if (depth > this.defaultCheckDepth) {
-      console.warn(
+      this.logger.warn(
         `Authorization check exceeded maximum depth (${
           this.defaultCheckDepth
         }) for ${who.type}:${who.id} ${String(canThey)} ${onWhat.type}:${
@@ -355,7 +363,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   }): Promise<number> {
     const groupRelation = this.findGroupRelation();
     if (!groupRelation) {
-      console.warn(
+      this.logger.warn(
         "Attempted removeMember, but no 'group' relation defined in schema.",
       );
       return 0;

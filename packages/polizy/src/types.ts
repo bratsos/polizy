@@ -1,6 +1,13 @@
 export type SubjectType = string;
 export type ObjectType = string;
 
+/**
+ * Logger interface for Polizy. Allows custom logging handlers.
+ */
+export interface Logger {
+  warn: (message: string) => void;
+}
+
 export type Subject<T extends SubjectType = SubjectType> = {
   type: T;
   id: string;
