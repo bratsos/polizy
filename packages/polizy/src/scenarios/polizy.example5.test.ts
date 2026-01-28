@@ -139,10 +139,11 @@ describe("Authorization Service example scenarios", () => {
           }),
         );
 
-        const tomsGroups = await storage.findObjects(
-          { type: "user", id: "tom1" },
-          "member",
-        );
+        const membershipTuples = await authz.listTuples({
+          subject: { type: "user", id: "tom1" },
+          relation: "member",
+        });
+        const tomsGroups = membershipTuples.map((t) => t.object);
         assert.deepStrictEqual(
           tomsGroups.sort((a, b) => a.id.localeCompare(b.id)),
           [
