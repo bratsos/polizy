@@ -372,10 +372,9 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   }): Promise<number> {
     const groupRelation = this.findGroupRelation();
     if (!groupRelation) {
-      this.logger.warn(
-        "Attempted removeMember, but no 'group' relation defined in schema.",
+      throw new SchemaError(
+        "Schema does not define any relation with type 'group'."
       );
-      return 0;
     }
     return this.deleteTuple({
       who: args.member,

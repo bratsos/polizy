@@ -109,21 +109,33 @@ describe("AuthSystem Error Handling", () => {
     });
   });
 
-  describe("removeMember() with no group relation", () => {
-    it("should return 0 and log warning when schema has no group relation", async () => {
-      const schema = defineSchema({
-        relations: { viewer: { type: "direct" } },
-        actionToRelations: { view: ["viewer"] },
+  describe("removeMember() errors", () => {
+    it("should throw SchemaError when schema has no group relation", async () => {
+      const noGroupSchema = defineSchema({
+        relations: {
+          viewer: { type: "direct" },
+        },
+        actionToRelations: {
+          view: ["viewer"],
+        },
       });
+
       const storage = new InMemoryStorageAdapter();
-      const authz = new AuthSystem({ storage, schema });
+      const authz = new AuthSystem({ storage, schema: noGroupSchema });
 
-      const result = await authz.removeMember({
-        member: { type: "user", id: "alice" },
-        group: { type: "group", id: "team1" },
-      });
-
-      assert.strictEqual(result, 0, "Should return 0 when no group relation");
+      await assert.rejects(
+        async () => {
+          await authz.removeMember({
+            member: { type: "user", id: "alice" },
+            group: { type: "group", id: "engineering" },
+          });
+        },
+        (err: Error) => {
+          assert.ok(err instanceof SchemaError, "Should be SchemaError");
+          assert.ok(err.message.includes("group"), "Message should mention 'group'");
+          return true;
+        }
+      );
     });
   });
 
