@@ -299,5 +299,300 @@ export function defineStorageAdapterTestSuite(
         "Remaining object ID mismatch",
       );
     });
+
+    it("findSubjects() should return subjects with specified relation to object", async () => {
+      await adapter.write([
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "user", id: "bob" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "group", id: "engineering" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "user", id: "charlie" },
+          relation: "editor",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "user", id: "dave" },
+          relation: "viewer",
+          object: { type: "document", id: "doc2" },
+        },
+      ]);
+
+      const subjects = await adapter.findSubjects(
+        { type: "document", id: "doc1" },
+        "viewer",
+      );
+
+      assert.strictEqual(
+        subjects.length,
+        3,
+        "Should find 3 subjects with viewer relation to doc1",
+      );
+
+      const subjectIds = subjects.map((s) => s.id).sort();
+      assert.deepStrictEqual(
+        subjectIds,
+        ["alice", "bob", "engineering"],
+        "Should return alice, bob, and engineering as viewers",
+      );
+    });
+
+    it("findSubjects() should filter by subjectType", async () => {
+      await adapter.write([
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "user", id: "bob" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "group", id: "engineering" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "group", id: "marketing" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+      ]);
+
+      const userSubjects = await adapter.findSubjects(
+        { type: "document", id: "doc1" },
+        "viewer",
+        { subjectType: "user" },
+      );
+
+      assert.strictEqual(
+        userSubjects.length,
+        2,
+        "Should find only 2 user-type subjects",
+      );
+
+      const userIds = userSubjects.map((s) => s.id).sort();
+      assert.deepStrictEqual(
+        userIds,
+        ["alice", "bob"],
+        "Should return only alice and bob (users)",
+      );
+
+      userSubjects.forEach((s) => {
+        assert.strictEqual(
+          s.type,
+          "user",
+          "All returned subjects should be of type user",
+        );
+      });
+    });
+
+    it("findObjects() should return objects that subject has relation to", async () => {
+      await adapter.write([
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "document", id: "doc2" },
+        },
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "folder", id: "folder1" },
+        },
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "editor",
+          object: { type: "document", id: "doc3" },
+        },
+        {
+          subject: { type: "user", id: "bob" },
+          relation: "viewer",
+          object: { type: "document", id: "doc4" },
+        },
+      ]);
+
+      const objects = await adapter.findObjects(
+        { type: "user", id: "alice" },
+        "viewer",
+      );
+
+      assert.strictEqual(
+        objects.length,
+        3,
+        "Should find 3 objects alice has viewer relation to",
+      );
+
+      const objectIds = objects.map((o) => o.id).sort();
+      assert.deepStrictEqual(
+        objectIds,
+        ["doc1", "doc2", "folder1"],
+        "Should return doc1, doc2, and folder1 as objects alice can view",
+      );
+    });
+
+    it("findObjects() should filter by objectType", async () => {
+      await adapter.write([
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "document", id: "doc1" },
+        },
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "document", id: "doc2" },
+        },
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "folder", id: "folder1" },
+        },
+        {
+          subject: { type: "user", id: "alice" },
+          relation: "viewer",
+          object: { type: "folder", id: "folder2" },
+        },
+      ]);
+
+      const documentObjects = await adapter.findObjects(
+        { type: "user", id: "alice" },
+        "viewer",
+        { objectType: "document" },
+      );
+
+      assert.strictEqual(
+        documentObjects.length,
+        2,
+        "Should find only 2 document-type objects",
+      );
+
+      const docIds = documentObjects.map((o) => o.id).sort();
+      assert.deepStrictEqual(
+        docIds,
+        ["doc1", "doc2"],
+        "Should return only doc1 and doc2 (documents)",
+      );
+
+      documentObjects.forEach((o) => {
+        assert.strictEqual(
+          o.type,
+          "document",
+          "All returned objects should be of type document",
+        );
+      });
+    });
+
+    it("write() should handle tuples with conditions", async () => {
+      const futureDate = new Date(Date.now() + 86400000); // tomorrow
+      const pastDate = new Date(Date.now() - 86400000); // yesterday
+
+      const tuplesToWrite: InputTuple<TestSubject, TestObject>[] = [
+        {
+          subject: { type: "user", id: "tempUser" },
+          relation: "viewer",
+          object: { type: "document", id: "tempDoc" },
+          condition: { validUntil: futureDate },
+        },
+        {
+          subject: { type: "user", id: "scheduledUser" },
+          relation: "editor",
+          object: { type: "folder", id: "scheduledFolder" },
+          condition: { validSince: pastDate, validUntil: futureDate },
+        },
+      ];
+
+      const storedTuples = await adapter.write(tuplesToWrite);
+
+      assert.strictEqual(
+        storedTuples.length,
+        2,
+        "Should store both tuples with conditions",
+      );
+
+      const tempTuple = storedTuples.find(
+        (t) => t.subject.id === "tempUser",
+      );
+      assert.ok(tempTuple, "Should find the tempUser tuple");
+      assert.ok(tempTuple.condition, "tempUser tuple should have a condition");
+      assert.ok(
+        tempTuple.condition.validUntil,
+        "tempUser tuple should have validUntil",
+      );
+      assert.strictEqual(
+        tempTuple.condition.validUntil.getTime(),
+        futureDate.getTime(),
+        "validUntil should match the future date",
+      );
+      assert.strictEqual(
+        tempTuple.condition.validSince,
+        undefined,
+        "tempUser tuple should not have validSince",
+      );
+
+      const scheduledTuple = storedTuples.find(
+        (t) => t.subject.id === "scheduledUser",
+      );
+      assert.ok(scheduledTuple, "Should find the scheduledUser tuple");
+      assert.ok(
+        scheduledTuple.condition,
+        "scheduledUser tuple should have a condition",
+      );
+      assert.ok(
+        scheduledTuple.condition.validSince,
+        "scheduledUser tuple should have validSince",
+      );
+      assert.ok(
+        scheduledTuple.condition.validUntil,
+        "scheduledUser tuple should have validUntil",
+      );
+      assert.strictEqual(
+        scheduledTuple.condition.validSince.getTime(),
+        pastDate.getTime(),
+        "validSince should match the past date",
+      );
+      assert.strictEqual(
+        scheduledTuple.condition.validUntil.getTime(),
+        futureDate.getTime(),
+        "validUntil should match the future date",
+      );
+
+      // Verify tuples can be retrieved with conditions intact
+      const foundTuples = await adapter.findTuples({
+        subject: { type: "user", id: "tempUser" },
+      });
+      assert.strictEqual(foundTuples.length, 1, "Should find tempUser tuple");
+      assert.ok(foundTuples[0], "Should have found tuple");
+      assert.ok(
+        foundTuples[0].condition,
+        "Retrieved tuple should have condition",
+      );
+      assert.ok(
+        foundTuples[0].condition.validUntil,
+        "Retrieved tuple should have validUntil",
+      );
+      assert.strictEqual(
+        foundTuples[0].condition.validUntil.getTime(),
+        futureDate.getTime(),
+        "Retrieved validUntil should match",
+      );
+    });
   });
 }
