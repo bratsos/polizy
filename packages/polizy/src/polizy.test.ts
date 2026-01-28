@@ -888,6 +888,73 @@ describe("AuthSystem Core Tests", () => {
     });
   });
 
+  describe("removeParent", () => {
+    const schema = defineSchema({
+      relations: {
+        parent: { type: "hierarchy" },
+        viewer: { type: "direct" },
+      },
+      actionToRelations: {
+        view: ["viewer"],
+      },
+      hierarchyPropagation: {
+        view: ["view"],
+      },
+    });
+    let authSystem: AuthSystem<typeof schema>;
+
+    beforeEach(() => {
+      authSystem = new AuthSystem({ storage, schema });
+    });
+
+    it("should remove parent relationship and stop permission propagation", async () => {
+      // 1. Set up parent-child relationship: doc1 -> folderA
+      await authSystem.setParent({
+        child: { type: "doc", id: "doc1" },
+        parent: { type: "folder", id: "folderA" },
+      });
+
+      // 2. Grant viewer on folderA to alice
+      await authSystem.allow({
+        who: { type: "user", id: "alice" },
+        toBe: "viewer",
+        onWhat: { type: "folder", id: "folderA" },
+      });
+
+      // 3. Verify alice can view doc1 via hierarchy
+      let result = await authSystem.check({
+        who: { type: "user", id: "alice" },
+        canThey: "view",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      assert.strictEqual(result, true);
+
+      // 4. Remove parent relationship
+      const deleteCount = await authSystem.removeParent({
+        child: { type: "doc", id: "doc1" },
+        parent: { type: "folder", id: "folderA" },
+      });
+      assert.strictEqual(deleteCount, 1);
+
+      // 5. Verify alice can no longer view doc1
+      result = await authSystem.check({
+        who: { type: "user", id: "alice" },
+        canThey: "view",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      assert.strictEqual(result, false);
+    });
+
+    it("should return 0 when parent relationship does not exist", async () => {
+      // removeParent on non-existent relationship should return 0
+      const deleteCount = await authSystem.removeParent({
+        child: { type: "doc", id: "doc1" },
+        parent: { type: "folder", id: "folderA" },
+      });
+      assert.strictEqual(deleteCount, 0);
+    });
+  });
+
   describe("listTuples", () => {
     const schema = defineSchema({
       relations: {
