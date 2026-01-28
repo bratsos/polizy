@@ -18,7 +18,7 @@ import type {
   RelationDefinition,
   Logger,
 } from "./types.ts";
-import { ConfigurationError, SchemaError } from "./errors.ts";
+import { ConfigurationError, SchemaError, MaxDepthExceededError } from "./errors.ts";
 
 const defaultLogger: Logger = {
   warn: (msg: string) => console.warn(msg),
@@ -42,6 +42,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   private readonly defaultCheckDepth: number;
   private readonly fieldSeparator: string;
   private readonly logger: Logger;
+  private readonly throwOnMaxDepth: boolean;
 
   constructor(config: {
     storage: StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>;
@@ -49,6 +50,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     defaultCheckDepth?: number;
     fieldSeparator?: string;
     logger?: Logger;
+    throwOnMaxDepth?: boolean;
   }) {
     if (!config.storage)
       throw new ConfigurationError("Storage adapter is required.");
@@ -60,6 +62,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     this.defaultCheckDepth = config.defaultCheckDepth ?? 10;
     this.fieldSeparator = config.fieldSeparator ?? "#";
     this.logger = config.logger ?? defaultLogger;
+    this.throwOnMaxDepth = config.throwOnMaxDepth ?? false;
   }
 
   async writeTuple(
@@ -133,13 +136,19 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       return false;
     }
     if (depth > this.defaultCheckDepth) {
-      this.logger.warn(
-        `Authorization check exceeded maximum depth (${
-          this.defaultCheckDepth
-        }) for ${who.type}:${who.id} ${String(canThey)} ${onWhat.type}:${
-          onWhat.id
-        }`,
-      );
+      const message = `Authorization check exceeded maximum depth (${this.defaultCheckDepth}) for ${who.type}:${who.id} ${String(canThey)} ${onWhat.type}:${onWhat.id}`;
+
+      if (this.throwOnMaxDepth) {
+        throw new MaxDepthExceededError(
+          message,
+          { type: who.type, id: who.id },
+          String(canThey),
+          { type: onWhat.type, id: onWhat.id },
+          depth
+        );
+      }
+
+      this.logger.warn(message);
       return false;
     }
 
