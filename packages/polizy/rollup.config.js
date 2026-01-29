@@ -17,7 +17,7 @@ const tsPlugin = (options = {}) =>
     declaration: false,
     declarationDir: undefined,
     declarationMap: false,
-    allowImportingTsExtensions: true,
+    allowImportingTsExtensions: false,
   });
 
 export default [
