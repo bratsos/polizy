@@ -3,9 +3,9 @@ import { InMemoryStorageAdapter } from "./polizy.in-memory.storage.ts";
 
 import {
   defineStorageAdapterTestSuite,
-  type StorageAdapterTestContext,
-  type TestSubject as SharedTestSubject,
   type TestObject as SharedTestObject,
+  type TestSubject as SharedTestSubject,
+  type StorageAdapterTestContext,
 } from "./polizy.storage.shared-tests.ts";
 
 describe("InMemoryStorageAdapter Tests", () => {

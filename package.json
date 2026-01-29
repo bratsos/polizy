@@ -5,10 +5,14 @@
   "main": "index.js",
   "scripts": {
     "test": "cd packages/polizy && pnpm test",
+    "build": "cd packages/polizy && pnpm build",
     "format": "pnpm biome format .",
     "format:fix": "pnpm biome format --write .",
     "lint": "pnpm biome lint .",
-    "lint:fix": "pnpm biome lint --fix ."
+    "lint:fix": "pnpm biome lint --fix .",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && cd packages/polizy && npm publish --access public"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +22,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.0-beta.1",
+    "@changesets/cli": "^2.29.8",
     "@types/node": "^20.11.0"
   },
   "dependencies": {

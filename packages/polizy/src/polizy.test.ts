@@ -1,11 +1,10 @@
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-
-import { AuthSystem } from "./polizy.ts";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { ConfigurationError } from "./errors.ts";
 import { InMemoryStorageAdapter } from "./polizy.in-memory.storage.ts";
 import type { StorageAdapter } from "./polizy.storage.ts";
+import { AuthSystem } from "./polizy.ts";
 import { defineSchema } from "./types.ts";
-import { ConfigurationError } from "./errors.ts";
 
 type TestSubjectType = "user" | "group";
 type TestObjectType = "doc" | "folder" | "org" | "group" | "system";
@@ -1046,9 +1045,7 @@ describe("AuthSystem Core Tests", () => {
       });
       assert.strictEqual(tuples.length, 2);
       assert.ok(
-        tuples.every(
-          (t) => t.object.type === "doc" && t.object.id === "doc1",
-        ),
+        tuples.every((t) => t.object.type === "doc" && t.object.id === "doc1"),
       );
     });
 

@@ -3,12 +3,12 @@ import type { StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
   InputTuple,
+  ObjectType,
   Relation,
   StoredTuple,
   Subject,
-  TupleId,
   SubjectType,
-  ObjectType,
+  TupleId,
 } from "./types";
 
 export class InMemoryStorageAdapter<

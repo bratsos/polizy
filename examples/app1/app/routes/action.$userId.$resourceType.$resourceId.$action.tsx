@@ -1,23 +1,23 @@
+import { Button } from "@synopsisapp/symbiosis-ui";
+import type {
+  AnyObject,
+  SchemaObjectTypes,
+  SchemaSubjectTypes,
+  Subject,
+} from "polizy";
 import * as React from "react";
+import type { LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs } from "react-router";
 import {
-  useLoaderData,
-  Link,
-  useRouteError,
-  isRouteErrorResponse,
   data,
   Form,
+  isRouteErrorResponse,
+  Link,
+  useLoaderData,
+  useRouteError,
 } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
-import { authz, prisma, storage, docSchema } from "../lib/polizy.server";
-import type {
-  SchemaObjectTypes,
-  Subject,
-  SchemaSubjectTypes,
-  AnyObject,
-} from "polizy";
 import { redirect } from "react-router";
-import type { ActionFunctionArgs } from "react-router";
-import { Button } from "@synopsisapp/symbiosis-ui";
+import { authz, docSchema, prisma, storage } from "../lib/polizy.server";
 
 type LoaderData = {
   userId: string;

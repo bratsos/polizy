@@ -3,11 +3,11 @@ import type { StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
   InputTuple,
+  ObjectType,
   Relation,
   StoredTuple,
   Subject,
   SubjectType,
-  ObjectType,
 } from "./types";
 
 function mapPrismaTupleToStoredTuple<

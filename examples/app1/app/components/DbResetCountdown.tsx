@@ -20,7 +20,7 @@ const calculateTimeLeft = (intervalMinutes: number): string => {
   const secondsLeft = secondsUntilNextInterval % 60;
 
   return `${String(minutesLeft).padStart(2, "0")}:${String(
-    secondsLeft
+    secondsLeft,
   ).padStart(2, "0")}`;
 };
 
@@ -28,7 +28,7 @@ const DbResetCountdown: React.FC<DbResetCountdownProps> = ({
   intervalMinutes,
 }) => {
   const [timeLeft, setTimeLeft] = React.useState<string>(() =>
-    calculateTimeLeft(intervalMinutes)
+    calculateTimeLeft(intervalMinutes),
   );
 
   React.useEffect(() => {

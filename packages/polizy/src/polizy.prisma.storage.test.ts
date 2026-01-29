@@ -1,19 +1,19 @@
-import { describe, it, before, after } from "node:test";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { after, before, describe, it } from "node:test";
 
 import {
   defineStorageAdapterTestSuite,
-  type StorageAdapterTestContext,
-  type TestSubject as SharedTestSubject,
   type TestObject as SharedTestObject,
+  type TestSubject as SharedTestSubject,
+  type StorageAdapterTestContext,
 } from "./polizy.storage.shared-tests.ts";
 
 // Check if Prisma client is generated before running tests
 const prismaClientPath = path.join(
   import.meta.dirname,
-  "../prisma/client-generated/index.js"
+  "../prisma/client-generated/index.js",
 );
 const isPrismaClientAvailable = fs.existsSync(prismaClientPath);
 
@@ -27,42 +27,48 @@ const setupTestDatabase = () => {
   } catch (error) {
     console.error("Failed to reset test database:", error);
     throw new Error(
-      "Database setup failed. Ensure DATABASE_URL is set correctly and Prisma CLI is available."
+      "Database setup failed. Ensure DATABASE_URL is set correctly and Prisma CLI is available.",
     );
   }
 };
 
-describe("PrismaStorageAdapter Tests", { skip: !isPrismaClientAvailable }, async () => {
-  // Dynamic import only if available
-  const { PrismaClient } = await import("../prisma/client-generated/index.js");
-  const { PrismaAdapter } = await import("./polizy.prisma.storage.ts");
+describe(
+  "PrismaStorageAdapter Tests",
+  { skip: !isPrismaClientAvailable },
+  async () => {
+    // Dynamic import only if available
+    const { PrismaClient } = await import(
+      "../prisma/client-generated/index.js"
+    );
+    const { PrismaAdapter } = await import("./polizy.prisma.storage.ts");
 
-  let prisma: InstanceType<typeof PrismaClient>;
+    let prisma: InstanceType<typeof PrismaClient>;
 
-  before(() => {
-    if (!process.env.DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL environment variable is not set for testing."
-      );
-    }
+    before(() => {
+      if (!process.env.DATABASE_URL) {
+        throw new Error(
+          "DATABASE_URL environment variable is not set for testing.",
+        );
+      }
 
-    prisma = new PrismaClient();
-    setupTestDatabase();
-  });
+      prisma = new PrismaClient();
+      setupTestDatabase();
+    });
 
-  after(async () => {
-    await prisma.$disconnect();
-  });
+    after(async () => {
+      await prisma.$disconnect();
+    });
 
-  const prismaTestContext: StorageAdapterTestContext = {
-    getAdapter: async () => {
-      // @ts-ignore
-      return PrismaAdapter<SharedTestSubject, SharedTestObject>(prisma);
-    },
-    cleanup: async () => {
-      await prisma.polizyTuple.deleteMany({});
-    },
-  };
+    const prismaTestContext: StorageAdapterTestContext = {
+      getAdapter: async () => {
+        // @ts-ignore
+        return PrismaAdapter<SharedTestSubject, SharedTestObject>(prisma);
+      },
+      cleanup: async () => {
+        await prisma.polizyTuple.deleteMany({});
+      },
+    };
 
-  defineStorageAdapterTestSuite("PrismaStorageAdapter", prismaTestContext);
-});
+    defineStorageAdapterTestSuite("PrismaStorageAdapter", prismaTestContext);
+  },
+);

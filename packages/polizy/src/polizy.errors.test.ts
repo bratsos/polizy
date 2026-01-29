@@ -1,9 +1,9 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "./polizy.ts";
+import { beforeEach, describe, it } from "node:test";
+import { ConfigurationError, SchemaError } from "./errors.ts";
 import { InMemoryStorageAdapter } from "./polizy.in-memory.storage.ts";
+import { AuthSystem } from "./polizy.ts";
 import { defineSchema } from "./types.ts";
-import { SchemaError, ConfigurationError } from "./errors.ts";
 
 describe("AuthSystem Error Handling", () => {
   describe("writeTuple() errors", () => {
@@ -25,11 +25,13 @@ describe("AuthSystem Error Handling", () => {
           });
         },
         (err: Error) => {
-          return err instanceof SchemaError &&
+          return (
+            err instanceof SchemaError &&
             err.message.includes("nonexistent_relation") &&
-            err.message.includes("not defined");
+            err.message.includes("not defined")
+          );
         },
-        "Should throw SchemaError for undefined relation"
+        "Should throw SchemaError for undefined relation",
       );
     });
   });
@@ -51,10 +53,9 @@ describe("AuthSystem Error Handling", () => {
           });
         },
         (err: Error) => {
-          return err instanceof SchemaError &&
-            err.message.includes("group");
+          return err instanceof SchemaError && err.message.includes("group");
         },
-        "Should throw SchemaError when no group relation defined"
+        "Should throw SchemaError when no group relation defined",
       );
     });
   });
@@ -76,10 +77,11 @@ describe("AuthSystem Error Handling", () => {
           });
         },
         (err: Error) => {
-          return err instanceof SchemaError &&
-            err.message.includes("hierarchy");
+          return (
+            err instanceof SchemaError && err.message.includes("hierarchy")
+          );
         },
-        "Should throw SchemaError when no hierarchy relation defined"
+        "Should throw SchemaError when no hierarchy relation defined",
       );
     });
   });
@@ -101,10 +103,11 @@ describe("AuthSystem Error Handling", () => {
           });
         },
         (err: Error) => {
-          return err instanceof SchemaError &&
-            err.message.includes("hierarchy");
+          return (
+            err instanceof SchemaError && err.message.includes("hierarchy")
+          );
         },
-        "Should throw SchemaError when no hierarchy relation defined"
+        "Should throw SchemaError when no hierarchy relation defined",
       );
     });
   });
@@ -132,9 +135,12 @@ describe("AuthSystem Error Handling", () => {
         },
         (err: Error) => {
           assert.ok(err instanceof SchemaError, "Should be SchemaError");
-          assert.ok(err.message.includes("group"), "Message should mention 'group'");
+          assert.ok(
+            err.message.includes("group"),
+            "Message should mention 'group'",
+          );
           return true;
-        }
+        },
       );
     });
   });
