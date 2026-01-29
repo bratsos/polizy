@@ -27,7 +27,7 @@
     "isbot": "^5.1.25",
     "node-cron": "^3.0.3",
     "pm2": "^6.0.5",
-    "polizy": "0.1.1",
+    "polizy": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router": "^7.4.1",
