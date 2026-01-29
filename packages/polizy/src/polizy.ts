@@ -65,6 +65,28 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     this.throwOnMaxDepth = config.throwOnMaxDepth ?? false;
   }
 
+  /**
+   * Write a permission tuple directly to storage.
+   *
+   * This is a low-level method for creating relationship tuples. For common
+   * operations, prefer using higher-level methods like `allow()`, `addMember()`,
+   * or `setParent()`.
+   *
+   * @param tuple - The tuple to write
+   * @param tuple.subject - The subject of the relationship
+   * @param tuple.relation - The relation type (must be defined in schema)
+   * @param tuple.object - The object of the relationship
+   * @param tuple.condition - Optional time-based validity conditions
+   * @returns Promise resolving to the stored tuple with generated ID
+   * @throws {SchemaError} If the relation is not defined in the schema
+   *
+   * @example
+   * const tuple = await authz.writeTuple({
+   *   subject: { type: "user", id: "alice" },
+   *   relation: "viewer",
+   *   object: { type: "document", id: "doc123" }
+   * });
+   */
   async writeTuple(
     tuple: Omit<
       InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
@@ -117,6 +139,27 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     });
   }
 
+  /**
+   * Check if a subject can perform an action on an object.
+   *
+   * Evaluates direct permissions, group memberships, and hierarchy propagation
+   * to determine if access should be granted.
+   *
+   * @param request - The authorization check request
+   * @param request.who - The subject (user or entity) requesting access
+   * @param request.canThey - The action being requested (e.g., "view", "edit")
+   * @param request.onWhat - The object being accessed
+   * @param request.context - Optional context for the check
+   * @returns Promise resolving to true if access is granted, false otherwise
+   * @throws {MaxDepthExceededError} If throwOnMaxDepth is enabled and depth limit exceeded
+   *
+   * @example
+   * const canView = await authz.check({
+   *   who: { type: "user", id: "alice" },
+   *   canThey: "view",
+   *   onWhat: { type: "document", id: "doc123" }
+   * });
+   */
   async check(request: {
     who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
     canThey: TypedAction<S>;
@@ -285,6 +328,27 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     return true;
   }
 
+  /**
+   * Grant a permission by creating a relationship tuple.
+   *
+   * Creates a tuple establishing that a subject has a specific relation
+   * to an object, optionally with time-based conditions.
+   *
+   * @param args - The permission grant arguments
+   * @param args.who - The subject receiving the permission
+   * @param args.toBe - The relation to grant (e.g., "owner", "editor", "viewer")
+   * @param args.onWhat - The object the permission applies to
+   * @param args.when - Optional time-based validity conditions
+   * @returns Promise resolving to the stored tuple
+   * @throws {SchemaError} If the relation is not defined in the schema
+   *
+   * @example
+   * await authz.allow({
+   *   who: { type: "user", id: "alice" },
+   *   toBe: "editor",
+   *   onWhat: { type: "document", id: "doc123" }
+   * });
+   */
   async allow(args: {
     who: Subject<SchemaSubjectTypes<S>>;
     toBe: TypedRelation<S>;
@@ -345,6 +409,25 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   }): Promise<number> {
     return this.deleteTuple(filter);
   }
+  /**
+   * Add a member to a group.
+   *
+   * Creates a group membership tuple, allowing the member to inherit
+   * permissions granted to the group.
+   *
+   * @param args - The membership arguments
+   * @param args.member - The subject or object to add as a member
+   * @param args.group - The group to add the member to
+   * @param args.condition - Optional time-based validity conditions
+   * @returns Promise resolving to the stored membership tuple
+   * @throws {SchemaError} If no group relation is defined in the schema
+   *
+   * @example
+   * await authz.addMember({
+   *   member: { type: "user", id: "alice" },
+   *   group: { type: "team", id: "engineering" }
+   * });
+   */
   async addMember(args: {
     member: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaSubjectTypes<S>>;
     group: AnyObject<SchemaObjectTypes<S>>;
@@ -366,6 +449,24 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     });
   }
 
+  /**
+   * Remove a member from a group.
+   *
+   * Deletes the group membership tuple, revoking inherited permissions
+   * the member had through the group.
+   *
+   * @param args - The membership removal arguments
+   * @param args.member - The subject to remove from the group
+   * @param args.group - The group to remove the member from
+   * @returns Promise resolving to the number of tuples deleted (0 or 1)
+   * @throws {SchemaError} If no group relation is defined in the schema
+   *
+   * @example
+   * await authz.removeMember({
+   *   member: { type: "user", id: "alice" },
+   *   group: { type: "team", id: "engineering" }
+   * });
+   */
   async removeMember(args: {
     member: Subject<SchemaSubjectTypes<S>>;
     group: AnyObject<SchemaObjectTypes<S>>;
@@ -383,6 +484,25 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     });
   }
 
+  /**
+   * Set a parent relationship in a hierarchy.
+   *
+   * Creates a hierarchy tuple, allowing permissions to propagate from
+   * parent to child based on hierarchyPropagation rules in the schema.
+   *
+   * @param args - The hierarchy arguments
+   * @param args.child - The child object in the hierarchy
+   * @param args.parent - The parent object in the hierarchy
+   * @param args.condition - Optional time-based validity conditions
+   * @returns Promise resolving to the stored hierarchy tuple
+   * @throws {SchemaError} If no hierarchy relation is defined in the schema
+   *
+   * @example
+   * await authz.setParent({
+   *   child: { type: "document", id: "doc123" },
+   *   parent: { type: "folder", id: "folder456" }
+   * });
+   */
   async setParent(args: {
     child: AnyObject<SchemaObjectTypes<S>>;
     parent: AnyObject<SchemaObjectTypes<S>>;
@@ -404,6 +524,24 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     });
   }
 
+  /**
+   * Remove a parent relationship from a hierarchy.
+   *
+   * Deletes the hierarchy tuple, stopping permission propagation
+   * from the parent to the child.
+   *
+   * @param args - The hierarchy removal arguments
+   * @param args.child - The child object in the hierarchy
+   * @param args.parent - The parent object to disconnect from
+   * @returns Promise resolving to the number of tuples deleted (0 or 1)
+   * @throws {SchemaError} If no hierarchy relation is defined in the schema
+   *
+   * @example
+   * await authz.removeParent({
+   *   child: { type: "document", id: "doc123" },
+   *   parent: { type: "folder", id: "folder456" }
+   * });
+   */
   async removeParent(args: {
     child: AnyObject<SchemaObjectTypes<S>>;
     parent: AnyObject<SchemaObjectTypes<S>>;
@@ -423,6 +561,28 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     });
   }
 
+  /**
+   * List permission tuples matching the specified filter criteria.
+   *
+   * Retrieves tuples from storage with optional filtering by subject,
+   * relation, object, or condition. Supports pagination via limit and offset.
+   *
+   * @param filter - Filter criteria for tuples
+   * @param filter.subject - Filter by subject
+   * @param filter.relation - Filter by relation type
+   * @param filter.object - Filter by object
+   * @param filter.condition - Filter by condition
+   * @param options - Pagination options
+   * @param options.limit - Maximum number of tuples to return
+   * @param options.offset - Number of tuples to skip
+   * @returns Promise resolving to an array of matching tuples
+   *
+   * @example
+   * const tuples = await authz.listTuples(
+   *   { subject: { type: "user", id: "alice" } },
+   *   { limit: 10, offset: 0 }
+   * );
+   */
   async listTuples(
     filter: Partial<
       Omit<InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>, "id"> & {
@@ -444,6 +604,29 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     >[];
   }
 
+  /**
+   * List all objects of a given type that a subject can access.
+   *
+   * Discovers accessible objects by evaluating direct permissions, group
+   * memberships, and hierarchy propagation. Returns objects with their
+   * allowed actions and parent relationships.
+   *
+   * @param args - The query arguments
+   * @param args.who - The subject to check access for
+   * @param args.ofType - The object type to list (e.g., "document", "folder")
+   * @param args.canThey - Optional action filter to only include objects with this action
+   * @param args.context - Optional context for permission checks
+   * @param args.maxDepth - Maximum recursion depth (defaults to defaultCheckDepth)
+   * @returns Promise resolving to accessible objects with their actions and parents
+   *
+   * @example
+   * const result = await authz.listAccessibleObjects({
+   *   who: { type: "user", id: "alice" },
+   *   ofType: "document",
+   *   canThey: "edit"
+   * });
+   * // result.accessible = [{ object: {...}, actions: ["view", "edit"], parent: {...} }]
+   */
   async listAccessibleObjects(
     args: ListAccessibleObjectsArgs<S>,
   ): Promise<ListAccessibleObjectsResult<S>> {
