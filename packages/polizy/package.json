@@ -34,7 +34,7 @@
     "build:bundle": "rollup -c",
     "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle",
     "dev": "rollup -c -w",
-    "test": "dotenv -e ../../examples/app1/.env -- node --no-warnings=ExperimentalWarning --test src/*.test.ts src/**/*.test.ts"
+    "test": "npx dotenv-cli -e ../../examples/app1/.env -- node --no-warnings=ExperimentalWarning --test src/*.test.ts src/**/*.test.ts"
   },
   "keywords": [
     "authorization",
@@ -56,14 +56,15 @@
     "url": "https://github.com/bratsos/polizy/issues"
   },
   "devDependencies": {
+    "@prisma/client": "^6.5.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.2",
     "dotenv": "^16.4.7",
+    "dotenv-cli": "^11.0.0",
     "prisma": "^6.5.0",
     "rollup": "^4.39.0",
     "rollup-plugin-dts": "^6.2.1",
-    "typescript": "^5.8.2",
-    "@prisma/client": "^6.5.0"
+    "typescript": "^5.8.2"
   },
   "files": [
     "dist",
