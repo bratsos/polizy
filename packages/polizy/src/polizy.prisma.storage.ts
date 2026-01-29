@@ -13,12 +13,13 @@ import type {
  * Minimal interface for PrismaClient compatibility.
  * Users pass their own generated PrismaClient instance.
  */
-// biome-ignore lint/suspicious/noExplicitAny: Prisma returns dynamic types based on schema
 type PrismaClientLike = {
   $transaction: <T>(queries: Promise<T>[]) => Promise<T[]>;
   polizyTuple: {
     create: (args: { data: Record<string, unknown> }) => Promise<any>;
-    deleteMany: (args: { where: Record<string, unknown> }) => Promise<{ count: number }>;
+    deleteMany: (args: {
+      where: Record<string, unknown>;
+    }) => Promise<{ count: number }>;
     findMany: (args: {
       where?: Record<string, unknown>;
       distinct?: string[];
@@ -43,9 +44,7 @@ function mapPrismaTupleToStoredTuple<
 export function PrismaAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
->(
-  prisma: PrismaClientLike,
-): StorageAdapter<S, O> {
+>(prisma: PrismaClientLike): StorageAdapter<S, O> {
   const p = prisma;
 
   return {
