@@ -1,7 +1,7 @@
-import { describe, test, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "../polizy.ts";
+import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
+import { AuthSystem } from "../polizy.ts";
 import { defineSchema } from "../types.ts";
 
 let storage: InMemoryStorageAdapter<any, any>;

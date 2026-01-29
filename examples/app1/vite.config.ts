@@ -1,8 +1,8 @@
 import { reactRouter } from "@react-router/dev/vite";
+import { symbiosisUIPlugin } from "@synopsisapp/symbiosis-ui/plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
-import { symbiosisUIPlugin } from "@synopsisapp/symbiosis-ui/plugin";
 
 export default defineConfig(({ command }) => ({
   plugins: [

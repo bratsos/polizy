@@ -1,24 +1,28 @@
+import {
+  ConfigurationError,
+  MaxDepthExceededError,
+  SchemaError,
+} from "./errors.ts";
 import type { StorageAdapter } from "./polizy.storage.ts";
 import type {
-  Subject,
+  AccessibleObject,
   AnyObject,
   AuthSchema,
-  InputTuple,
   Condition,
-  TypedRelation,
-  TypedAction,
-  StoredTuple,
-  TupleSubject,
-  SchemaSubjectTypes,
-  SchemaObjectTypes,
+  InputTuple,
   ListAccessibleObjectsArgs,
   ListAccessibleObjectsResult,
-  AccessibleObject,
-  TypedObject,
-  RelationDefinition,
   Logger,
+  RelationDefinition,
+  SchemaObjectTypes,
+  SchemaSubjectTypes,
+  StoredTuple,
+  Subject,
+  TupleSubject,
+  TypedAction,
+  TypedObject,
+  TypedRelation,
 } from "./types.ts";
-import { ConfigurationError, SchemaError, MaxDepthExceededError } from "./errors.ts";
 
 const defaultLogger: Logger = {
   warn: (msg: string) => console.warn(msg),
@@ -187,7 +191,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
           { type: who.type, id: who.id },
           String(canThey),
           { type: onWhat.type, id: onWhat.id },
-          depth
+          depth,
         );
       }
 
@@ -474,7 +478,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     const groupRelation = this.findGroupRelation();
     if (!groupRelation) {
       throw new SchemaError(
-        "Schema does not define any relation with type 'group'."
+        "Schema does not define any relation with type 'group'.",
       );
     }
     return this.deleteTuple({

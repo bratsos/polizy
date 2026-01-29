@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { StorageAdapter } from "./polizy.storage";
 import type { InputTuple } from "./types";
 
@@ -527,9 +527,7 @@ export function defineStorageAdapterTestSuite(
         "Should store both tuples with conditions",
       );
 
-      const tempTuple = storedTuples.find(
-        (t) => t.subject.id === "tempUser",
-      );
+      const tempTuple = storedTuples.find((t) => t.subject.id === "tempUser");
       assert.ok(tempTuple, "Should find the tempUser tuple");
       assert.ok(tempTuple.condition, "tempUser tuple should have a condition");
       assert.ok(

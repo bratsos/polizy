@@ -1,11 +1,10 @@
-import * as React from "react";
-
-import { useLoaderData, useActionData, data, redirect } from "react-router";
 import type { AnyObject, SchemaObjectTypes } from "polizy";
+import * as React from "react";
 import type { ActionFunctionArgs } from "react-router";
-import UserResourceView from "../components/UserResourceView";
-import DbResetCountdown from "../components/DbResetCountdown";
+import { data, redirect, useActionData, useLoaderData } from "react-router";
 import { z } from "zod";
+import DbResetCountdown from "../components/DbResetCountdown";
+import UserResourceView from "../components/UserResourceView";
 
 import { authz, type docSchema, prisma } from "../lib/polizy.server";
 
@@ -215,7 +214,7 @@ export async function loader() {
     users.map(async (userId) => {
       const userResources = await fetchUserResources(userId);
       userData[userId] = { userId, resources: userResources };
-    })
+    }),
   );
 
   console.log("process.env.DB_RESET_INTERVAL_MINUTES");
@@ -225,7 +224,7 @@ export async function loader() {
   let intervalMinutes = Number.parseInt(intervalMinutesStr, 10);
   if (Number.isNaN(intervalMinutes) || intervalMinutes <= 0) {
     console.warn(
-      `Loader: Invalid DB_RESET_INTERVAL_MINUTES value "${intervalMinutesStr}". Defaulting to 15 minutes.`
+      `Loader: Invalid DB_RESET_INTERVAL_MINUTES value "${intervalMinutesStr}". Defaulting to 15 minutes.`,
     );
     intervalMinutes = 15;
   }
@@ -250,7 +249,7 @@ export async function action({ request }: ActionFunctionArgs) {
       .join("; ");
     return data(
       { ok: false, error: `Invalid form data: ${errorMessages}` },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -279,7 +278,7 @@ export async function action({ request }: ActionFunctionArgs) {
               ok: false,
               error: `User ${actingUserId} cannot share ${targetResource.type}:${targetResource.id}.`,
             },
-            { status: 403 }
+            { status: 403 },
           );
         }
 
@@ -324,7 +323,7 @@ export async function action({ request }: ActionFunctionArgs) {
             break;
           default:
             console.warn(
-              `Attempted to delete unknown resource type: ${resourceType}`
+              `Attempted to delete unknown resource type: ${resourceType}`,
             );
             break;
         }
@@ -347,7 +346,7 @@ export async function action({ request }: ActionFunctionArgs) {
         if (!newDocId) {
           return data(
             { ok: false, error: "Invalid title (results in empty ID)." },
-            { status: 400 }
+            { status: 400 },
           );
         }
         const newDoc = await prisma.document.create({
@@ -369,7 +368,7 @@ export async function action({ request }: ActionFunctionArgs) {
         if (!newFolderId) {
           return data(
             { ok: false, error: "Invalid name (results in empty ID)." },
-            { status: 400 }
+            { status: 400 },
           );
         }
         const newFolder = await prisma.folder.create({
@@ -391,7 +390,7 @@ export async function action({ request }: ActionFunctionArgs) {
         if (!newTeamId) {
           return data(
             { ok: false, error: "Invalid name (results in empty ID)." },
-            { status: 400 }
+            { status: 400 },
           );
         }
         const newTeam = await prisma.team.create({
@@ -409,7 +408,7 @@ export async function action({ request }: ActionFunctionArgs) {
         console.error("Unhandled action intent:", _exhaustiveCheck);
         return data(
           { ok: false, error: "Unhandled action intent." },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -420,7 +419,7 @@ export async function action({ request }: ActionFunctionArgs) {
         error:
           error.message || `Failed to perform action "${actionData.intent}".`,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

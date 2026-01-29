@@ -1,7 +1,7 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "./polizy.ts";
+import { describe, it } from "node:test";
 import { InMemoryStorageAdapter } from "./polizy.in-memory.storage.ts";
+import { AuthSystem } from "./polizy.ts";
 import { defineSchema } from "./types.ts";
 
 describe("AuthSystem Logger Configuration", () => {
@@ -33,7 +33,7 @@ describe("AuthSystem Logger Configuration", () => {
     assert.strictEqual(warnings.length, 1, "Should have logged one warning");
     assert.ok(
       warnings[0].includes("empty filter"),
-      "Warning should mention empty filter"
+      "Warning should mention empty filter",
     );
   });
 
@@ -71,11 +71,27 @@ describe("AuthSystem Logger Configuration", () => {
     });
 
     // Create a group chain deeper than maxDepth
-    await authz.addMember({ member: { type: "user", id: "alice" }, group: { type: "group", id: "g1" } });
-    await authz.addMember({ member: { type: "group", id: "g1" }, group: { type: "group", id: "g2" } });
-    await authz.addMember({ member: { type: "group", id: "g2" }, group: { type: "group", id: "g3" } });
-    await authz.addMember({ member: { type: "group", id: "g3" }, group: { type: "group", id: "g4" } });
-    await authz.allow({ who: { type: "group", id: "g4" }, toBe: "viewer", onWhat: { type: "doc", id: "doc1" } });
+    await authz.addMember({
+      member: { type: "user", id: "alice" },
+      group: { type: "group", id: "g1" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g1" },
+      group: { type: "group", id: "g2" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g2" },
+      group: { type: "group", id: "g3" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g3" },
+      group: { type: "group", id: "g4" },
+    });
+    await authz.allow({
+      who: { type: "group", id: "g4" },
+      toBe: "viewer",
+      onWhat: { type: "doc", id: "doc1" },
+    });
 
     // This should hit max depth and log a warning
     await authz.check({
@@ -85,8 +101,8 @@ describe("AuthSystem Logger Configuration", () => {
     });
 
     assert.ok(
-      warnings.some(w => w.includes("exceeded maximum depth")),
-      "Should log max depth warning"
+      warnings.some((w) => w.includes("exceeded maximum depth")),
+      "Should log max depth warning",
     );
   });
 });

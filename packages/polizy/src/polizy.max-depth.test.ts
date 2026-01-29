@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "./polizy.ts";
-import { InMemoryStorageAdapter } from "./polizy.in-memory.storage.ts";
-import { defineSchema } from "./types.ts";
+import { describe, it } from "node:test";
 import { MaxDepthExceededError } from "./errors.ts";
+import { InMemoryStorageAdapter } from "./polizy.in-memory.storage.ts";
+import { AuthSystem } from "./polizy.ts";
+import { defineSchema } from "./types.ts";
 
 describe("AuthSystem throwOnMaxDepth Option", () => {
   const schema = defineSchema({
@@ -26,11 +26,27 @@ describe("AuthSystem throwOnMaxDepth Option", () => {
     });
 
     // Create a group chain deeper than maxDepth
-    await authz.addMember({ member: { type: "user", id: "alice" }, group: { type: "group", id: "g1" } });
-    await authz.addMember({ member: { type: "group", id: "g1" }, group: { type: "group", id: "g2" } });
-    await authz.addMember({ member: { type: "group", id: "g2" }, group: { type: "group", id: "g3" } });
-    await authz.addMember({ member: { type: "group", id: "g3" }, group: { type: "group", id: "g4" } });
-    await authz.allow({ who: { type: "group", id: "g4" }, toBe: "viewer", onWhat: { type: "doc", id: "doc1" } });
+    await authz.addMember({
+      member: { type: "user", id: "alice" },
+      group: { type: "group", id: "g1" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g1" },
+      group: { type: "group", id: "g2" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g2" },
+      group: { type: "group", id: "g3" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g3" },
+      group: { type: "group", id: "g4" },
+    });
+    await authz.allow({
+      who: { type: "group", id: "g4" },
+      toBe: "viewer",
+      onWhat: { type: "doc", id: "doc1" },
+    });
 
     await assert.rejects(
       async () => {
@@ -41,12 +57,15 @@ describe("AuthSystem throwOnMaxDepth Option", () => {
         });
       },
       (err: Error) => {
-        assert.ok(err instanceof MaxDepthExceededError, "Should be MaxDepthExceededError");
+        assert.ok(
+          err instanceof MaxDepthExceededError,
+          "Should be MaxDepthExceededError",
+        );
         assert.strictEqual(err.action, "view");
         assert.strictEqual(err.object.type, "doc");
         assert.strictEqual(err.object.id, "doc1");
         return true;
-      }
+      },
     );
   });
 
@@ -60,11 +79,27 @@ describe("AuthSystem throwOnMaxDepth Option", () => {
     });
 
     // Same deep group chain
-    await authz.addMember({ member: { type: "user", id: "alice" }, group: { type: "group", id: "g1" } });
-    await authz.addMember({ member: { type: "group", id: "g1" }, group: { type: "group", id: "g2" } });
-    await authz.addMember({ member: { type: "group", id: "g2" }, group: { type: "group", id: "g3" } });
-    await authz.addMember({ member: { type: "group", id: "g3" }, group: { type: "group", id: "g4" } });
-    await authz.allow({ who: { type: "group", id: "g4" }, toBe: "viewer", onWhat: { type: "doc", id: "doc1" } });
+    await authz.addMember({
+      member: { type: "user", id: "alice" },
+      group: { type: "group", id: "g1" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g1" },
+      group: { type: "group", id: "g2" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g2" },
+      group: { type: "group", id: "g3" },
+    });
+    await authz.addMember({
+      member: { type: "group", id: "g3" },
+      group: { type: "group", id: "g4" },
+    });
+    await authz.allow({
+      who: { type: "group", id: "g4" },
+      toBe: "viewer",
+      onWhat: { type: "doc", id: "doc1" },
+    });
 
     // Should NOT throw, just return false
     const result = await authz.check({

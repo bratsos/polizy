@@ -22,7 +22,7 @@ declare namespace SymbiosisUI {
     | "symbiosis-toast-info"
     | "symbiosis-toast-success"
     | "symbiosis-toast-warning"
-    | "symbiosis-x"
+    | "symbiosis-x";
 
   const IconNames: readonly IconName[];
 }

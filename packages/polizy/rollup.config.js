@@ -1,7 +1,8 @@
-import typescript from "@rollup/plugin-typescript";
-import resolve from "@rollup/plugin-node-resolve";
-import dts from "rollup-plugin-dts";
 import { readFileSync } from "node:fs";
+import resolve from "@rollup/plugin-node-resolve";
+import typescript from "@rollup/plugin-typescript";
+import dts from "rollup-plugin-dts";
+
 const packageJson = JSON.parse(readFileSync("./package.json", "utf8"));
 
 const external = [

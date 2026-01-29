@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { defineSchema } from "./types.ts";
 
 describe("defineSchema validation", () => {
@@ -31,15 +31,15 @@ describe("defineSchema validation", () => {
     assert.equal(warnCalls.length, 1);
     assert.ok(
       warnCalls[0].includes("undefined relation"),
-      "Warning should mention undefined relation"
+      "Warning should mention undefined relation",
     );
     assert.ok(
       warnCalls[0].includes("viewer"),
-      "Warning should mention the undefined relation name 'viewer'"
+      "Warning should mention the undefined relation name 'viewer'",
     );
     assert.ok(
       warnCalls[0].includes("read"),
-      "Warning should mention the action 'read'"
+      "Warning should mention the action 'read'",
     );
   });
 
@@ -59,11 +59,11 @@ describe("defineSchema validation", () => {
     assert.equal(warnCalls.length, 1);
     assert.ok(
       warnCalls[0].includes("undefined child action"),
-      "Warning should mention undefined child action"
+      "Warning should mention undefined child action",
     );
     assert.ok(
       warnCalls[0].includes("write"),
-      "Warning should mention the undefined child action name 'write'"
+      "Warning should mention the undefined child action name 'write'",
     );
   });
 
@@ -83,11 +83,11 @@ describe("defineSchema validation", () => {
     assert.equal(warnCalls.length, 1);
     assert.ok(
       warnCalls[0].includes("undefined parent action"),
-      "Warning should mention undefined parent action"
+      "Warning should mention undefined parent action",
     );
     assert.ok(
       warnCalls[0].includes("manage"),
-      "Warning should mention the undefined parent action name 'manage'"
+      "Warning should mention the undefined parent action name 'manage'",
     );
   });
 
@@ -112,7 +112,7 @@ describe("defineSchema validation", () => {
     assert.equal(
       warnCalls.length,
       0,
-      "No warnings should be produced for a valid schema"
+      "No warnings should be produced for a valid schema",
     );
   });
 });
