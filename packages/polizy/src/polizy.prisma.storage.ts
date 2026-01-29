@@ -1,4 +1,3 @@
-import type { PrismaClient } from "@prisma/client";
 import type { StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
@@ -9,6 +8,24 @@ import type {
   Subject,
   SubjectType,
 } from "./types";
+
+/**
+ * Minimal interface for PrismaClient compatibility.
+ * Users pass their own generated PrismaClient instance.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: Prisma returns dynamic types based on schema
+type PrismaClientLike = {
+  $transaction: <T>(queries: Promise<T>[]) => Promise<T[]>;
+  polizyTuple: {
+    create: (args: { data: Record<string, unknown> }) => Promise<any>;
+    deleteMany: (args: { where: Record<string, unknown> }) => Promise<{ count: number }>;
+    findMany: (args: {
+      where?: Record<string, unknown>;
+      distinct?: string[];
+      select?: Record<string, boolean>;
+    }) => Promise<any[]>;
+  };
+};
 
 function mapPrismaTupleToStoredTuple<
   S extends SubjectType,
@@ -27,9 +44,9 @@ export function PrismaAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
 >(
-  prisma: PrismaClient | ReturnType<PrismaClient["$extends"]>,
+  prisma: PrismaClientLike,
 ): StorageAdapter<S, O> {
-  const p = prisma as PrismaClient;
+  const p = prisma;
 
   return {
     async write(tuples: InputTuple<S, O>[]): Promise<StoredTuple<S, O>[]> {
