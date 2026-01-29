@@ -34,7 +34,7 @@
     "build:bundle": "rollup -c",
     "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle",
     "dev": "rollup -c -w",
-    "test": "dotenv -e ../../examples/app1/.env -- node --test src/*.test.ts src/**/*.test.ts"
+    "test": "dotenv -e ../../examples/app1/.env -- node --no-warnings=ExperimentalWarning --test src/*.test.ts src/**/*.test.ts"
   },
   "keywords": [
     "authorization",

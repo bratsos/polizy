@@ -1,7 +1,7 @@
-import { describe, before, after } from "node:test";
-import { PrismaClient } from "../prisma/client-generated/index.js";
+import { describe, it, before, after } from "node:test";
 import { execSync } from "node:child_process";
-import { PrismaAdapter } from "./polizy.prisma.storage.ts";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 import {
   defineStorageAdapterTestSuite,
@@ -10,28 +10,39 @@ import {
   type TestObject as SharedTestObject,
 } from "./polizy.storage.shared-tests.ts";
 
+// Check if Prisma client is generated before running tests
+const prismaClientPath = path.join(
+  import.meta.dirname,
+  "../prisma/client-generated/index.js"
+);
+const isPrismaClientAvailable = fs.existsSync(prismaClientPath);
+
 const setupTestDatabase = () => {
   try {
     console.log("Resetting test database...");
     execSync("pnpm prisma migrate reset --force", { stdio: "inherit" });
-    execSync("prisma db push --force-reset", { stdio: "inherit" });
+    execSync("pnpm prisma db push --force-reset", { stdio: "inherit" });
     execSync("pnpm prisma generate", { stdio: "inherit" });
     console.log("Test database reset successfully.");
   } catch (error) {
     console.error("Failed to reset test database:", error);
     throw new Error(
-      "Database setup failed. Ensure DATABASE_URL is set correctly and Prisma CLI is available.",
+      "Database setup failed. Ensure DATABASE_URL is set correctly and Prisma CLI is available."
     );
   }
 };
 
-describe("PrismaStorageAdapter Tests", () => {
-  let prisma: PrismaClient;
+describe("PrismaStorageAdapter Tests", { skip: !isPrismaClientAvailable }, async () => {
+  // Dynamic import only if available
+  const { PrismaClient } = await import("../prisma/client-generated/index.js");
+  const { PrismaAdapter } = await import("./polizy.prisma.storage.ts");
+
+  let prisma: InstanceType<typeof PrismaClient>;
 
   before(() => {
     if (!process.env.DATABASE_URL) {
       throw new Error(
-        "DATABASE_URL environment variable is not set for testing.",
+        "DATABASE_URL environment variable is not set for testing."
       );
     }
 

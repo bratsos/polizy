@@ -27,6 +27,7 @@ export type {
   ListAccessibleObjectsArgs,
   ListAccessibleObjectsResult,
   AccessibleObject,
+  Logger,
 } from "./types";
 
 export * from "./errors";

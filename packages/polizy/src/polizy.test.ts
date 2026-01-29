@@ -887,4 +887,199 @@ describe("AuthSystem Core Tests", () => {
       });
     });
   });
+
+  describe("removeParent", () => {
+    const schema = defineSchema({
+      relations: {
+        parent: { type: "hierarchy" },
+        viewer: { type: "direct" },
+      },
+      actionToRelations: {
+        view: ["viewer"],
+      },
+      hierarchyPropagation: {
+        view: ["view"],
+      },
+    });
+    let authSystem: AuthSystem<typeof schema>;
+
+    beforeEach(() => {
+      authSystem = new AuthSystem({ storage, schema });
+    });
+
+    it("should remove parent relationship and stop permission propagation", async () => {
+      // 1. Set up parent-child relationship: doc1 -> folderA
+      await authSystem.setParent({
+        child: { type: "doc", id: "doc1" },
+        parent: { type: "folder", id: "folderA" },
+      });
+
+      // 2. Grant viewer on folderA to alice
+      await authSystem.allow({
+        who: { type: "user", id: "alice" },
+        toBe: "viewer",
+        onWhat: { type: "folder", id: "folderA" },
+      });
+
+      // 3. Verify alice can view doc1 via hierarchy
+      let result = await authSystem.check({
+        who: { type: "user", id: "alice" },
+        canThey: "view",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      assert.strictEqual(result, true);
+
+      // 4. Remove parent relationship
+      const deleteCount = await authSystem.removeParent({
+        child: { type: "doc", id: "doc1" },
+        parent: { type: "folder", id: "folderA" },
+      });
+      assert.strictEqual(deleteCount, 1);
+
+      // 5. Verify alice can no longer view doc1
+      result = await authSystem.check({
+        who: { type: "user", id: "alice" },
+        canThey: "view",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      assert.strictEqual(result, false);
+    });
+
+    it("should return 0 when parent relationship does not exist", async () => {
+      // removeParent on non-existent relationship should return 0
+      const deleteCount = await authSystem.removeParent({
+        child: { type: "doc", id: "doc1" },
+        parent: { type: "folder", id: "folderA" },
+      });
+      assert.strictEqual(deleteCount, 0);
+    });
+  });
+
+  describe("listTuples", () => {
+    const schema = defineSchema({
+      relations: {
+        member: { type: "group" },
+        viewer: { type: "direct" },
+        editor: { type: "direct" },
+        owner: { type: "direct" },
+      },
+      actionToRelations: {
+        view: ["viewer", "editor", "owner"],
+        edit: ["editor", "owner"],
+        delete: ["owner"],
+      },
+    });
+    let authSystem: AuthSystem<typeof schema>;
+
+    beforeEach(async () => {
+      authSystem = new AuthSystem({ storage, schema });
+
+      // Set up test data with multiple tuples
+      // Alice: viewer on doc1, editor on doc2
+      await authSystem.allow({
+        who: { type: "user", id: "alice" },
+        toBe: "viewer",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      await authSystem.allow({
+        who: { type: "user", id: "alice" },
+        toBe: "editor",
+        onWhat: { type: "doc", id: "doc2" },
+      });
+
+      // Bob: editor on doc1, owner on doc3
+      await authSystem.allow({
+        who: { type: "user", id: "bob" },
+        toBe: "editor",
+        onWhat: { type: "doc", id: "doc1" },
+      });
+      await authSystem.allow({
+        who: { type: "user", id: "bob" },
+        toBe: "owner",
+        onWhat: { type: "doc", id: "doc3" },
+      });
+
+      // Charlie: member of devs group
+      await authSystem.addMember({
+        member: { type: "user", id: "charlie" },
+        group: { type: "group", id: "devs" },
+      });
+
+      // Group devs: viewer on doc3
+      await authSystem.allow({
+        who: { type: "group", id: "devs" },
+        toBe: "viewer",
+        onWhat: { type: "doc", id: "doc3" },
+      });
+    });
+
+    it("should list all tuples when no filter provided", async () => {
+      const tuples = await authSystem.listTuples({});
+      // alice:viewer:doc1, alice:editor:doc2, bob:editor:doc1, bob:owner:doc3,
+      // charlie:member:devs, devs:viewer:doc3
+      assert.strictEqual(tuples.length, 6);
+    });
+
+    it("should filter by subject", async () => {
+      const tuples = await authSystem.listTuples({
+        subject: { type: "user", id: "alice" },
+      });
+      assert.strictEqual(tuples.length, 2);
+      assert.ok(
+        tuples.every(
+          (t) => t.subject.type === "user" && t.subject.id === "alice",
+        ),
+      );
+    });
+
+    it("should filter by relation", async () => {
+      const tuples = await authSystem.listTuples({
+        relation: "editor",
+      });
+      assert.strictEqual(tuples.length, 2);
+      assert.ok(tuples.every((t) => t.relation === "editor"));
+    });
+
+    it("should filter by object", async () => {
+      const tuples = await authSystem.listTuples({
+        object: { type: "doc", id: "doc1" },
+      });
+      assert.strictEqual(tuples.length, 2);
+      assert.ok(
+        tuples.every(
+          (t) => t.object.type === "doc" && t.object.id === "doc1",
+        ),
+      );
+    });
+
+    it("should apply pagination with limit", async () => {
+      const tuples = await authSystem.listTuples({}, { limit: 2 });
+      assert.strictEqual(tuples.length, 2);
+    });
+
+    it("should apply pagination with offset", async () => {
+      const allTuples = await authSystem.listTuples({});
+      const offsetTuples = await authSystem.listTuples({}, { offset: 2 });
+      assert.strictEqual(offsetTuples.length, allTuples.length - 2);
+      assert.deepStrictEqual(offsetTuples, allTuples.slice(2));
+    });
+
+    it("should apply pagination with limit and offset", async () => {
+      const allTuples = await authSystem.listTuples({});
+      const paginatedTuples = await authSystem.listTuples(
+        {},
+        { limit: 2, offset: 1 },
+      );
+      assert.strictEqual(paginatedTuples.length, 2);
+      assert.deepStrictEqual(paginatedTuples, allTuples.slice(1, 3));
+    });
+
+    it("should return empty array when no matches", async () => {
+      const tuples = await authSystem.listTuples({
+        subject: { type: "user", id: "nonexistent" },
+      });
+      assert.strictEqual(tuples.length, 0);
+      assert.deepStrictEqual(tuples, []);
+    });
+  });
 });

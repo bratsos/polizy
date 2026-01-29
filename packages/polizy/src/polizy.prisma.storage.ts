@@ -42,25 +42,15 @@ export function PrismaAdapter<
         condition: tuple.condition ?? undefined,
       }));
 
-      await p.polizyTuple.createMany({
-        data: dataToCreate,
-      });
+      // Use transaction with individual creates to get IDs back
+      const createdTuples = await p.$transaction(
+        dataToCreate.map((data) => p.polizyTuple.create({ data })),
+      );
 
-      const createdPrismaTuples = await p.polizyTuple.findMany({
-        where: {
-          OR: dataToCreate.map((d) => ({
-            subjectType: d.subjectType,
-            subjectId: d.subjectId,
-            relation: d.relation,
-            objectType: d.objectType,
-            objectId: d.objectId,
-          })),
-        },
-      });
-
-      return createdPrismaTuples.map(
-        mapPrismaTupleToStoredTuple,
-      ) as StoredTuple<S, O>[];
+      return createdTuples.map(mapPrismaTupleToStoredTuple) as StoredTuple<
+        S,
+        O
+      >[];
     },
 
     async delete(filter: {
