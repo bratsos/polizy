@@ -27,7 +27,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
-        run: npx prisma generate --schema=packages/polizy/prisma/schema.prisma
+        run: pnpm exec prisma generate --schema=packages/polizy/prisma/schema.prisma
 
       - name: Lint
         run: pnpm biome check .
