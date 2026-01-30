@@ -34,3 +34,6 @@ Thumbs.db
 # Prisma related
 client-generated
 dev.db
+
+# Documentation
+docs/
