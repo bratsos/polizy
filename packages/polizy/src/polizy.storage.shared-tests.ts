@@ -299,5 +299,98 @@ export function defineStorageAdapterTestSuite(
         "Remaining object ID mismatch",
       );
     });
+
+    it("write() round-trips a Date condition as a Date (not a string)", async () => {
+      const validUntil = new Date(Date.now() + 3_600_000);
+      await adapter.write([
+        {
+          subject: { type: "user", id: "tina" },
+          relation: "viewer",
+          object: { type: "document", id: "timed" },
+          condition: { validUntil },
+        },
+      ]);
+
+      const found = await adapter.findTuples({
+        subject: { type: "user", id: "tina" },
+        relation: "viewer",
+        object: { type: "document", id: "timed" },
+      });
+      assert.strictEqual(found.length, 1, "Should find the conditioned tuple");
+      assert.ok(found[0]?.condition, "Condition should be present after round-trip");
+      assert.ok(
+        found[0].condition.validUntil instanceof Date,
+        "validUntil should be a Date instance, not a string",
+      );
+      assert.strictEqual(
+        found[0].condition.validUntil.getTime(),
+        validUntil.getTime(),
+        "validUntil should survive the round-trip exactly",
+      );
+    });
+
+    it("write() is idempotent on the (subject, relation, object) key", async () => {
+      const tuple = {
+        subject: { type: "user", id: "ida" },
+        relation: "viewer" as const,
+        object: { type: "document", id: "idoc" },
+      };
+      await adapter.write([tuple]);
+      await adapter.write([{ ...tuple, condition: { validUntil: new Date(Date.now() + 1000) } }]);
+
+      const all = await adapter.findTuples({ subject: { type: "user", id: "ida" } });
+      assert.strictEqual(all.length, 1, "Re-writing the same tuple must not duplicate it");
+      assert.ok(all[0]?.condition?.validUntil, "Condition should reflect the latest write");
+    });
+
+    it("delete({ who, was, onWhat }) does not over-delete when onWhat is also a subject", async () => {
+      // removeParent(doc1, f1): must delete only doc1->f1, never f1->root.
+      await adapter.write([
+        {
+          subject: { type: "document", id: "doc1" },
+          relation: "parent",
+          object: { type: "folder", id: "f1" },
+        },
+        {
+          subject: { type: "folder", id: "f1" },
+          relation: "parent",
+          object: { type: "folder", id: "root" },
+        },
+      ]);
+
+      const deleted = await adapter.delete({
+        who: { type: "document", id: "doc1" },
+        was: "parent",
+        onWhat: { type: "folder", id: "f1" },
+      });
+      assert.strictEqual(deleted, 1, "Should delete exactly the doc1->f1 link");
+
+      const f1Parent = await adapter.findTuples({
+        subject: { type: "folder", id: "f1" },
+        relation: "parent",
+      });
+      assert.strictEqual(
+        f1Parent.length,
+        1,
+        "f1->root must survive removeParent(doc1, f1)",
+      );
+    });
+
+    it("findTuples() supports limit/offset pagination in stable order", async () => {
+      for (let i = 0; i < 5; i++) {
+        await adapter.write([
+          {
+            subject: { type: "user", id: `p${i}` },
+            relation: "viewer",
+            object: { type: "document", id: "paged" },
+          },
+        ]);
+      }
+      const page = await adapter.findTuples(
+        { object: { type: "document", id: "paged" } },
+        { limit: 2, offset: 2 },
+      );
+      assert.strictEqual(page.length, 2, "Should return exactly the requested page size");
+    });
   });
 }

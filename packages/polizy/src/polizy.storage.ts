@@ -13,9 +13,11 @@ export interface StorageAdapter<
   O extends ObjectType = ObjectType,
 > {
   /**
-   * Writes new tuples to the storage.
+   * Writes tuples to storage, idempotently. A tuple is identified by its
+   * (subject, relation, object) triple: writing one that already exists updates
+   * its condition rather than creating a duplicate. Returns the stored tuples
+   * (with ids) in the same order as the input.
    * @param tuples An array of tuples to write (without IDs).
-   * @returns A promise resolving to an array of the created tuples (with assigned IDs).
    */
   write(tuples: InputTuple<S, O>[]): Promise<StoredTuple<S, O>[]>;
 
@@ -37,8 +39,16 @@ export interface StorageAdapter<
     was?: Relation;
     onWhat?: AnyObject<O>;
   }): Promise<number>;
-  /** Finds stored tuples matching the filter. */
-  findTuples(filter: Partial<InputTuple<S, O>>): Promise<StoredTuple<S, O>[]>;
+  /**
+   * Finds stored tuples matching the filter. The delete/find subject-position
+   * semantics: a `who` constraint always pins the subject; `onWhat` matches the
+   * subject position only when `who` is absent.
+   * @param options Optional pagination (`limit`, `offset`) applied in stable order.
+   */
+  findTuples(
+    filter: Partial<InputTuple<S, O>>,
+    options?: { limit?: number; offset?: number },
+  ): Promise<StoredTuple<S, O>[]>;
   /** Finds subjects with a specific relation TO an object (e.g., members of a group). */
   findSubjects(
     object: AnyObject<O>,
