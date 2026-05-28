@@ -1,3 +1,5 @@
+import { SchemaError } from "./errors.ts";
+
 export type SubjectType = string;
 export type ObjectType = string;
 
@@ -9,6 +11,27 @@ export type AnyObject<T extends ObjectType = ObjectType> = {
   type: T;
   id: string;
 };
+
+/** Reserved subject id representing "everyone" (a public/wildcard grant). */
+export const PUBLIC_ID = "*";
+
+/**
+ * Build a wildcard subject of the given type. A grant to `everyone("user")`
+ * authorizes every `user` subject.
+ *
+ * @example authz.allow({ who: everyone("user"), toBe: "viewer", onWhat: doc })
+ */
+export const everyone = <T extends SubjectType>(type: T): Subject<T> => ({
+  type,
+  id: PUBLIC_ID,
+});
+
+/** Pluggable logger. Defaults to a no-op inside AuthSystem. */
+export interface Logger {
+  warn(message: string, meta?: unknown): void;
+  error(message: string, meta?: unknown): void;
+  debug?(message: string, meta?: unknown): void;
+}
 
 export type Relation = string;
 export type Action = string;
@@ -96,6 +119,15 @@ export interface AuthSchema<
   actionToRelations: ActionRelations;
   hierarchyPropagation?: HierarchyProp;
 
+  /**
+   * Object types that use field-level identifiers (id contains `fieldSeparator`,
+   * e.g. `doc1#title`). Only these types inherit access from their base object.
+   * Omit to disable field-level identifiers entirely (secure default).
+   */
+  fieldLevelObjects?: ReadonlyArray<ValidObjectTypes>;
+  /** Separator between base id and field for `fieldLevelObjects`. Default `"#"`. */
+  fieldSeparator?: string;
+
   _subjectType?: ValidSubjectTypes;
   _objectType?: ValidObjectTypes;
 }
@@ -151,6 +183,9 @@ export function defineSchema<
   actionToRelations: ActionRelations;
   hierarchyPropagation?: HierarchyProp;
 
+  fieldLevelObjects?: ReadonlyArray<ObjT>;
+  fieldSeparator?: string;
+
   subjectTypes?: ReadonlyArray<SubT>;
   objectTypes?: ReadonlyArray<ObjT>;
 }): AuthSchema<Relations, ActionRelations, HierarchyProp, SubT, ObjT> {
@@ -159,10 +194,10 @@ export function defineSchema<
     if (relationsForAction) {
       for (const relation of relationsForAction) {
         if (!(relation in schema.relations)) {
-          console.warn(
-            `Schema Warning: Action '${String(
-              action,
-            )}' references undefined relation '${String(relation)}'.`,
+          throw new SchemaError(
+            `Action '${String(action)}' references undefined relation '${String(
+              relation,
+            )}'.`,
           );
         }
       }
@@ -171,8 +206,8 @@ export function defineSchema<
   if (schema.hierarchyPropagation) {
     for (const childAction in schema.hierarchyPropagation) {
       if (!(childAction in schema.actionToRelations)) {
-        console.warn(
-          `Schema Warning: hierarchyPropagation references undefined child action '${String(
+        throw new SchemaError(
+          `hierarchyPropagation references undefined child action '${String(
             childAction,
           )}'.`,
         );
@@ -181,8 +216,8 @@ export function defineSchema<
       if (parentActions) {
         for (const parentAction of parentActions) {
           if (!(parentAction in schema.actionToRelations)) {
-            console.warn(
-              `Schema Warning: hierarchyPropagation for '${String(
+            throw new SchemaError(
+              `hierarchyPropagation for '${String(
                 childAction,
               )}' references undefined parent action '${String(parentAction)}'.`,
             );
@@ -233,3 +268,17 @@ export interface ListAccessibleObjectsResult<
 > {
   accessible: Array<AccessibleObject<Schema>>;
 }
+
+/**
+ * A node in an authorization explanation tree — the path by which access was
+ * granted. Produced by `explain()`.
+ */
+export type ExplainNode =
+  | { kind: "direct"; relation: string }
+  | { kind: "wildcard"; relation: string }
+  | { kind: "field"; base: AnyObject; via: ExplainNode }
+  | { kind: "group"; relation: string; through: AnyObject; via: ExplainNode }
+  | { kind: "hierarchy"; relation: string; parent: AnyObject; via: ExplainNode };
+
+/** Result of `explain()`: the decision plus the granting path (null when denied). */
+export type ExplainResult = { allowed: boolean; via: ExplainNode | null };
