@@ -17,7 +17,9 @@ model PolizyTuple {
   objectId    String
   condition   Json?
 
+  // Each relationship is unique; enables idempotent upserts.
+  @@unique([subjectType, subjectId, relation, objectType, objectId])
+  // Lookups: "what does this subject have?" and "who has this object?"
   @@index([subjectType, subjectId, relation])
   @@index([objectType, objectId, relation])
-  @@index([subjectType, subjectId, relation, objectType, objectId], name: "full_tuple_index")
 }

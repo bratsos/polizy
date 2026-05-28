@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
+  Condition,
   InputTuple,
   Relation,
   StoredTuple,
@@ -9,6 +10,21 @@ import type {
   SubjectType,
   ObjectType,
 } from "./types";
+
+/**
+ * Revive a condition read from a JSON column. JSON does not preserve `Date`, so
+ * `validSince`/`validUntil` come back as ISO strings — convert them back to
+ * `Date` so the engine's condition logic receives the contract it expects.
+ */
+function reviveCondition(raw: unknown): Condition | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const c = raw as Record<string, unknown>;
+  const out: Condition = {};
+  if (c.validSince != null) out.validSince = new Date(c.validSince as string);
+  if (c.validUntil != null) out.validUntil = new Date(c.validUntil as string);
+  if (Array.isArray(c.attributes)) out.attributes = c.attributes as Condition["attributes"];
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 
 function mapPrismaTupleToStoredTuple<
   S extends SubjectType,
@@ -19,7 +35,7 @@ function mapPrismaTupleToStoredTuple<
     subject: { type: prismaTuple.subjectType as S, id: prismaTuple.subjectId },
     relation: prismaTuple.relation,
     object: { type: prismaTuple.objectType as O, id: prismaTuple.objectId },
-    condition: prismaTuple.condition ?? undefined,
+    condition: reviveCondition(prismaTuple.condition),
   };
 }
 
@@ -33,34 +49,31 @@ export function PrismaAdapter<
 
   return {
     async write(tuples: InputTuple<S, O>[]): Promise<StoredTuple<S, O>[]> {
-      const dataToCreate = tuples.map((tuple) => ({
-        subjectType: tuple.subject.type,
-        subjectId: tuple.subject.id,
-        relation: tuple.relation,
-        objectType: tuple.object.type,
-        objectId: tuple.object.id,
-        condition: tuple.condition ?? undefined,
-      }));
+      // Idempotent upsert per tuple, atomically, preserving input order. A
+      // condition is only written when provided, so re-granting a tuple without
+      // a `when` leaves any existing condition untouched (revoke to clear it).
+      const rows = await p.$transaction(
+        tuples.map((tuple) => {
+          const key = {
+            subjectType: tuple.subject.type,
+            subjectId: tuple.subject.id,
+            relation: tuple.relation,
+            objectType: tuple.object.type,
+            objectId: tuple.object.id,
+          };
+          const condition =
+            tuple.condition !== undefined ? { condition: tuple.condition } : {};
+          return p.polizyTuple.upsert({
+            where: {
+              subjectType_subjectId_relation_objectType_objectId: key,
+            },
+            create: { ...key, ...condition },
+            update: condition,
+          });
+        }),
+      );
 
-      await p.polizyTuple.createMany({
-        data: dataToCreate,
-      });
-
-      const createdPrismaTuples = await p.polizyTuple.findMany({
-        where: {
-          OR: dataToCreate.map((d) => ({
-            subjectType: d.subjectType,
-            subjectId: d.subjectId,
-            relation: d.relation,
-            objectType: d.objectType,
-            objectId: d.objectId,
-          })),
-        },
-      });
-
-      return createdPrismaTuples.map(
-        mapPrismaTupleToStoredTuple,
-      ) as StoredTuple<S, O>[];
+      return rows.map(mapPrismaTupleToStoredTuple) as StoredTuple<S, O>[];
     },
 
     async delete(filter: {
@@ -68,51 +81,40 @@ export function PrismaAdapter<
       was?: Relation;
       onWhat?: AnyObject<O>;
     }): Promise<number> {
-      const baseWhereClause: any = {};
-      if (filter.who) {
-        baseWhereClause.subjectType = filter.who.type;
-        baseWhereClause.subjectId = filter.who.id;
-      }
-      if (filter.was) {
-        baseWhereClause.relation = filter.was;
-      }
-
-      let finalWhereClause: any;
-
-      if (filter.onWhat) {
-        const whereClauseObjectMatch = {
-          ...baseWhereClause,
-          objectType: filter.onWhat.type,
-          objectId: filter.onWhat.id,
-        };
-
-        const whereClauseSubjectMatch = {
-          ...baseWhereClause,
-          subjectType: filter.onWhat.type,
-          subjectId: filter.onWhat.id,
-        };
-        finalWhereClause = {
-          OR: [whereClauseObjectMatch, whereClauseSubjectMatch],
-        };
-      } else {
-        finalWhereClause = baseWhereClause;
-      }
-
-      if (Object.keys(finalWhereClause).length === 0 && !finalWhereClause.OR) {
-        console.warn(
-          "PrismaStorageAdapter.delete called with an empty filter. No tuples deleted.",
-        );
+      if (!filter.who && !filter.was && !filter.onWhat) {
+        // Guard against accidental full deletion (AuthSystem also guards).
         return 0;
       }
 
-      const result = await p.polizyTuple.deleteMany({
-        where: finalWhereClause,
-      });
+      // Mirror the in-memory contract exactly:
+      //   (who?  subject == who) AND
+      //   (was?  relation == was) AND
+      //   (onWhat?  object == onWhat OR subject == onWhat)
+      // Because `who` is AND-ed at the top level, the subject-position arm can
+      // only match when who === onWhat, so an explicit `who` never causes the
+      // over-deletion the previous OR-spread did.
+      const where: any = {};
+      if (filter.who) {
+        where.subjectType = filter.who.type;
+        where.subjectId = filter.who.id;
+      }
+      if (filter.was) {
+        where.relation = filter.was;
+      }
+      if (filter.onWhat) {
+        where.OR = [
+          { objectType: filter.onWhat.type, objectId: filter.onWhat.id },
+          { subjectType: filter.onWhat.type, subjectId: filter.onWhat.id },
+        ];
+      }
+
+      const result = await p.polizyTuple.deleteMany({ where });
       return result.count;
     },
 
     async findTuples(
       filter: Partial<InputTuple<S, O>>,
+      options?: { limit?: number; offset?: number },
     ): Promise<StoredTuple<S, O>[]> {
       const whereClause: any = {};
       if (filter.subject) {
@@ -137,6 +139,9 @@ export function PrismaAdapter<
 
       const results = await p.polizyTuple.findMany({
         where: whereClause,
+        ...(options?.offset !== undefined ? { skip: options.offset } : {}),
+        ...(options?.limit !== undefined ? { take: options.limit } : {}),
+        orderBy: { id: "asc" },
       });
       return results.map(mapPrismaTupleToStoredTuple) as StoredTuple<S, O>[];
     },
@@ -191,3 +196,9 @@ export function PrismaAdapter<
     },
   };
 }
+
+/**
+ * Alias for {@link PrismaAdapter}. Provided so the documented
+ * `PrismaStorageAdapter` name resolves; both are the same factory.
+ */
+export const PrismaStorageAdapter = PrismaAdapter;

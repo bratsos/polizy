@@ -66,8 +66,12 @@ export class InMemoryStorageAdapter<
     for (const inputTuple of tuples) {
       const existing = this.findExisting(inputTuple);
       if (existing) {
-        // Idempotent: update the condition on the existing tuple, no duplicate.
-        existing.condition = inputTuple.condition;
+        // Idempotent: re-writing only updates the condition when one is
+        // provided, so re-granting without a `when` preserves any existing
+        // condition (matches the Prisma adapter). Revoke to clear it.
+        if (inputTuple.condition !== undefined) {
+          existing.condition = inputTuple.condition;
+        }
         result.push(existing);
         continue;
       }
