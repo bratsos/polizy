@@ -12,8 +12,43 @@ export type AnyObject<T extends ObjectType = ObjectType> = {
 
 export type Relation = string;
 export type Action = string;
-export type Condition = { validSince?: Date; validUntil?: Date };
 export type TupleId = string;
+
+/** A JSON scalar usable as an attribute-predicate operand. */
+export type JsonScalar = string | number | boolean | null;
+
+/** Comparison operators supported by attribute predicates. */
+export type AttributeOperator =
+  | "eq"
+  | "ne"
+  | "in"
+  | "nin"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte";
+
+/**
+ * An attribute-based predicate evaluated against the `context` passed to
+ * `check()`. `attribute` is a dot-path into the context object.
+ */
+export type AttributePredicate = {
+  attribute: string;
+  operator: AttributeOperator;
+  value: JsonScalar | JsonScalar[];
+};
+
+/**
+ * Constraints attached to a tuple. A tuple only grants access while its
+ * condition is valid: within the optional time window AND with every attribute
+ * predicate satisfied by the check-time context. Evaluation is fail-closed.
+ */
+export type Condition = {
+  validSince?: Date;
+  validUntil?: Date;
+  /** All predicates must pass (logical AND). */
+  attributes?: AttributePredicate[];
+};
 
 export type TupleSubject<S extends SubjectType, O extends ObjectType> =
   | Subject<S>
