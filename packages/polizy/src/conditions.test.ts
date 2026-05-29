@@ -1,5 +1,5 @@
-import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { isConditionValid } from "./conditions.ts";
 import type { Condition } from "./types.ts";
 

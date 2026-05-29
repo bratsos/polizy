@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:./dev.db" # SQLite file for the Prisma adapter test suite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # reads packageManager from package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Lint & format (Biome)
+        run: pnpm biome ci packages/polizy/src
+      - name: Build library
+        run: pnpm --filter polizy build
+      - name: Test library (in-memory + Prisma adapters)
+        run: pnpm --filter polizy test

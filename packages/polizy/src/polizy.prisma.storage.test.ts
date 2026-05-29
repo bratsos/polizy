@@ -1,13 +1,13 @@
-import { describe, before, after } from "node:test";
-import { PrismaClient } from "../prisma/client-generated/index.js";
 import { execSync } from "node:child_process";
+import { after, before, describe } from "node:test";
+import { PrismaClient } from "../prisma/client-generated/index.js";
 import { PrismaAdapter } from "./polizy.prisma.storage.ts";
 
 import {
   defineStorageAdapterTestSuite,
-  type StorageAdapterTestContext,
-  type TestSubject as SharedTestSubject,
   type TestObject as SharedTestObject,
+  type TestSubject as SharedTestSubject,
+  type StorageAdapterTestContext,
 } from "./polizy.storage.shared-tests.ts";
 
 const setupTestDatabase = () => {

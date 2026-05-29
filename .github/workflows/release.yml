@@ -1,0 +1,59 @@
+name: Release
+
+# Publishes `polizy` to npm via Changesets using npm Trusted Publishing (OIDC).
+# There is NO NPM_TOKEN — authentication is short-lived OIDC, and provenance is
+# generated automatically.
+#
+# ONE-TIME SETUP on npmjs.com → the `polizy` package → Settings → Trusted Publisher:
+#   Publisher:         GitHub Actions
+#   Organization/user: bratsos
+#   Repository:        polizy
+#   Workflow filename: release.yml   (this file's name — must match exactly)
+#   Allowed actions:   npm publish
+# (Trusted publishing requires the package to already have ≥1 published version,
+#  which `polizy` does.)
+#
+# Day-to-day flow:
+#   1. Contributors add a changeset:  pnpm changeset
+#   2. Merging to main opens a "Version Packages" PR (bumps version + CHANGELOG).
+#   3. Merging that PR triggers this workflow's publish path → npm.
+# The current 0.3.0 (already bumped in package.json, not yet on npm) publishes on
+# the first run with no pending changesets.
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write # push the Version Packages branch and git tags
+  pull-requests: write # open/update the Version Packages PR
+  id-token: write # OIDC token for npm Trusted Publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:./dev.db" # satisfies the Prisma datasource during build/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # ≥ 22.14 required for OIDC trusted publishing
+      - name: Upgrade npm (Trusted Publishing requires npm ≥ 11.5.1)
+        run: npm install -g npm@latest
+      - run: pnpm install --frozen-lockfile
+      - name: Test before publish
+        run: pnpm --filter polizy test
+      - name: Create Version Packages PR or publish to npm
+        uses: changesets/action@v1
+        with:
+          version: pnpm exec changeset version && pnpm install --lockfile-only
+          publish: pnpm release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

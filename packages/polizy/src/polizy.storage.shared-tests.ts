@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import type { StorageAdapter } from "./polizy.storage";
 import type { InputTuple } from "./types";
 

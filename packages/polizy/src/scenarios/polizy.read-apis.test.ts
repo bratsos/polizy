@@ -1,14 +1,14 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "../polizy.ts";
-import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
-import { defineSchema, everyone } from "../types.ts";
+import { beforeEach, describe, it } from "node:test";
 import { NotAuthorizedError } from "../errors.ts";
+import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
+import { AuthSystem } from "../polizy.ts";
 import type {
   InputTuple,
   SchemaObjectTypes,
   SchemaSubjectTypes,
 } from "../types.ts";
+import { defineSchema, everyone } from "../types.ts";
 
 const schema = defineSchema({
   subjectTypes: ["user"],
@@ -62,9 +62,21 @@ describe("read APIs", () => {
         onWhat: { type: "document", id: "d1" },
       });
       const results = await authz.checkMany([
-        { who: { type: "user", id: "a" }, canThey: "edit", onWhat: { type: "document", id: "d1" } },
-        { who: { type: "user", id: "a" }, canThey: "edit", onWhat: { type: "document", id: "d2" } },
-        { who: { type: "user", id: "a" }, canThey: "view", onWhat: { type: "document", id: "d1" } },
+        {
+          who: { type: "user", id: "a" },
+          canThey: "edit",
+          onWhat: { type: "document", id: "d1" },
+        },
+        {
+          who: { type: "user", id: "a" },
+          canThey: "edit",
+          onWhat: { type: "document", id: "d2" },
+        },
+        {
+          who: { type: "user", id: "a" },
+          canThey: "view",
+          onWhat: { type: "document", id: "d1" },
+        },
       ]);
       assert.deepEqual(results, [true, false, true]);
     });
@@ -127,7 +139,10 @@ describe("read APIs", () => {
         toBe: "viewer",
         onWhat: { type: "document", id: "d1" },
       });
-      await authz.addMember({ member: { type: "user", id: "c" }, group: { type: "team", id: "t" } });
+      await authz.addMember({
+        member: { type: "user", id: "c" },
+        group: { type: "team", id: "t" },
+      });
       const r = await authz.explain({
         who: { type: "user", id: "c" },
         canThey: "view",
@@ -184,7 +199,10 @@ describe("read APIs", () => {
         toBe: "viewer",
         onWhat: { type: "document", id: "d1" },
       });
-      await authz.addMember({ member: { type: "user", id: "viaGroup" }, group: { type: "team", id: "t" } });
+      await authz.addMember({
+        member: { type: "user", id: "viaGroup" },
+        group: { type: "team", id: "t" },
+      });
       const subjects = await authz.listSubjects({
         canThey: "view",
         onWhat: { type: "document", id: "d1" },

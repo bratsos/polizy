@@ -1,14 +1,14 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { defineSchema } from "../types.ts";
+import { describe, it } from "node:test";
 import { SchemaError } from "../errors.ts";
 import {
+  fieldSeparator,
   groupRelations,
   hierarchyRelations,
-  fieldSeparator,
   isFieldType,
   resolveRelation,
 } from "../schema.ts";
+import { defineSchema } from "../types.ts";
 
 const multi = defineSchema({
   subjectTypes: ["user"],

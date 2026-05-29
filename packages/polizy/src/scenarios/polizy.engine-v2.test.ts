@@ -1,14 +1,14 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "../polizy.ts";
-import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
-import { defineSchema, everyone } from "../types.ts";
+import { beforeEach, describe, it } from "node:test";
 import { MaxDepthExceededError } from "../errors.ts";
+import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
+import { AuthSystem } from "../polizy.ts";
 import type {
   InputTuple,
   SchemaObjectTypes,
   SchemaSubjectTypes,
 } from "../types.ts";
+import { defineSchema, everyone } from "../types.ts";
 
 const schema = defineSchema({
   subjectTypes: ["user"],
@@ -71,42 +71,88 @@ describe("engine v2", () => {
         toBe: "viewer",
         onWhat: { type: "document", id: "dB" },
       });
-      await authz.addMember({ member: { type: "user", id: "alice" }, group: { type: "team", id: "t1" }, as: "member" });
-      await authz.addMember({ member: { type: "user", id: "alice" }, group: { type: "org", id: "o1" }, as: "orgMember" });
+      await authz.addMember({
+        member: { type: "user", id: "alice" },
+        group: { type: "team", id: "t1" },
+        as: "member",
+      });
+      await authz.addMember({
+        member: { type: "user", id: "alice" },
+        group: { type: "org", id: "o1" },
+        as: "orgMember",
+      });
 
       assert.equal(
-        await authz.check({ who: { type: "user", id: "alice" }, canThey: "view", onWhat: { type: "document", id: "dA" } }),
+        await authz.check({
+          who: { type: "user", id: "alice" },
+          canThey: "view",
+          onWhat: { type: "document", id: "dA" },
+        }),
         true,
       );
       assert.equal(
-        await authz.check({ who: { type: "user", id: "alice" }, canThey: "view", onWhat: { type: "document", id: "dB" } }),
+        await authz.check({
+          who: { type: "user", id: "alice" },
+          canThey: "view",
+          onWhat: { type: "document", id: "dB" },
+        }),
         true,
       );
     });
 
     it("traverses ALL hierarchy relations (folderParent and orgParent)", async () => {
-      await authz.allow({ who: { type: "user", id: "bob" }, toBe: "viewer", onWhat: { type: "folder", id: "f1" } });
-      await authz.allow({ who: { type: "user", id: "bob" }, toBe: "viewer", onWhat: { type: "org", id: "o9" } });
-      await authz.setParent({ child: { type: "document", id: "dX" }, parent: { type: "folder", id: "f1" }, as: "folderParent" });
-      await authz.setParent({ child: { type: "document", id: "dY" }, parent: { type: "org", id: "o9" }, as: "orgParent" });
+      await authz.allow({
+        who: { type: "user", id: "bob" },
+        toBe: "viewer",
+        onWhat: { type: "folder", id: "f1" },
+      });
+      await authz.allow({
+        who: { type: "user", id: "bob" },
+        toBe: "viewer",
+        onWhat: { type: "org", id: "o9" },
+      });
+      await authz.setParent({
+        child: { type: "document", id: "dX" },
+        parent: { type: "folder", id: "f1" },
+        as: "folderParent",
+      });
+      await authz.setParent({
+        child: { type: "document", id: "dY" },
+        parent: { type: "org", id: "o9" },
+        as: "orgParent",
+      });
 
       assert.equal(
-        await authz.check({ who: { type: "user", id: "bob" }, canThey: "view", onWhat: { type: "document", id: "dX" } }),
+        await authz.check({
+          who: { type: "user", id: "bob" },
+          canThey: "view",
+          onWhat: { type: "document", id: "dX" },
+        }),
         true,
       );
       assert.equal(
-        await authz.check({ who: { type: "user", id: "bob" }, canThey: "view", onWhat: { type: "document", id: "dY" } }),
+        await authz.check({
+          who: { type: "user", id: "bob" },
+          canThey: "view",
+          onWhat: { type: "document", id: "dY" },
+        }),
         true,
       );
     });
 
     it("requires `as` for addMember/setParent when multiple relations exist", async () => {
       await assert.rejects(
-        authz.addMember({ member: { type: "user", id: "alice" }, group: { type: "team", id: "t1" } }),
+        authz.addMember({
+          member: { type: "user", id: "alice" },
+          group: { type: "team", id: "t1" },
+        }),
         /multiple 'group' relations/,
       );
       await assert.rejects(
-        authz.setParent({ child: { type: "document", id: "dX" }, parent: { type: "folder", id: "f1" } }),
+        authz.setParent({
+          child: { type: "document", id: "dX" },
+          parent: { type: "folder", id: "f1" },
+        }),
         /multiple 'hierarchy' relations/,
       );
     });
@@ -114,53 +160,105 @@ describe("engine v2", () => {
 
   describe("field opt-in propagation", () => {
     it("does NOT split ids for object types not in fieldLevelObjects", async () => {
-      await authz.allow({ who: { type: "user", id: "carl" }, toBe: "viewer", onWhat: { type: "folder", id: "f1" } });
+      await authz.allow({
+        who: { type: "user", id: "carl" },
+        toBe: "viewer",
+        onWhat: { type: "folder", id: "f1" },
+      });
       // folder is not field-enabled: "f1#sub" must not inherit from "f1"
       assert.equal(
-        await authz.check({ who: { type: "user", id: "carl" }, canThey: "view", onWhat: { type: "folder", id: "f1#sub" } }),
+        await authz.check({
+          who: { type: "user", id: "carl" },
+          canThey: "view",
+          onWhat: { type: "folder", id: "f1#sub" },
+        }),
         false,
       );
     });
 
     it("inherits a field id from its base via a DIRECT grant", async () => {
-      await authz.allow({ who: { type: "user", id: "dan" }, toBe: "owner", onWhat: { type: "document", id: "d1" } });
+      await authz.allow({
+        who: { type: "user", id: "dan" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d1" },
+      });
       assert.equal(
-        await authz.check({ who: { type: "user", id: "dan" }, canThey: "view", onWhat: { type: "document", id: "d1#title" } }),
+        await authz.check({
+          who: { type: "user", id: "dan" },
+          canThey: "view",
+          onWhat: { type: "document", id: "d1#title" },
+        }),
         true,
       );
     });
 
     it("inherits a field id from its base via a GROUP grant", async () => {
-      await authz.allow({ who: { type: "team", id: "t1" }, toBe: "viewer", onWhat: { type: "document", id: "d1" } });
-      await authz.addMember({ member: { type: "user", id: "erin" }, group: { type: "team", id: "t1" }, as: "member" });
+      await authz.allow({
+        who: { type: "team", id: "t1" },
+        toBe: "viewer",
+        onWhat: { type: "document", id: "d1" },
+      });
+      await authz.addMember({
+        member: { type: "user", id: "erin" },
+        group: { type: "team", id: "t1" },
+        as: "member",
+      });
       assert.equal(
-        await authz.check({ who: { type: "user", id: "erin" }, canThey: "view", onWhat: { type: "document", id: "d1#title" } }),
+        await authz.check({
+          who: { type: "user", id: "erin" },
+          canThey: "view",
+          onWhat: { type: "document", id: "d1#title" },
+        }),
         true,
       );
     });
 
     it("inherits a field id from its base via a HIERARCHY grant", async () => {
-      await authz.allow({ who: { type: "user", id: "fin" }, toBe: "viewer", onWhat: { type: "folder", id: "f1" } });
-      await authz.setParent({ child: { type: "document", id: "d1" }, parent: { type: "folder", id: "f1" }, as: "folderParent" });
+      await authz.allow({
+        who: { type: "user", id: "fin" },
+        toBe: "viewer",
+        onWhat: { type: "folder", id: "f1" },
+      });
+      await authz.setParent({
+        child: { type: "document", id: "d1" },
+        parent: { type: "folder", id: "f1" },
+        as: "folderParent",
+      });
       assert.equal(
-        await authz.check({ who: { type: "user", id: "fin" }, canThey: "view", onWhat: { type: "document", id: "d1#title" } }),
+        await authz.check({
+          who: { type: "user", id: "fin" },
+          canThey: "view",
+          onWhat: { type: "document", id: "d1#title" },
+        }),
         true,
       );
     });
 
     it("rejects writing a malformed field id (empty base or trailing separator)", async () => {
       await assert.rejects(
-        authz.allow({ who: { type: "user", id: "g" }, toBe: "viewer", onWhat: { type: "document", id: "#title" } }),
+        authz.allow({
+          who: { type: "user", id: "g" },
+          toBe: "viewer",
+          onWhat: { type: "document", id: "#title" },
+        }),
       );
       await assert.rejects(
-        authz.allow({ who: { type: "user", id: "g" }, toBe: "viewer", onWhat: { type: "document", id: "d1#" } }),
+        authz.allow({
+          who: { type: "user", id: "g" },
+          toBe: "viewer",
+          onWhat: { type: "document", id: "d1#" },
+        }),
       );
     });
 
     it("does not treat an empty base as a wildcard", async () => {
       // No grant exists; a query with a leading separator must not match anything.
       assert.equal(
-        await authz.check({ who: { type: "user", id: "h" }, canThey: "view", onWhat: { type: "document", id: "#secret" } }),
+        await authz.check({
+          who: { type: "user", id: "h" },
+          canThey: "view",
+          onWhat: { type: "document", id: "#secret" },
+        }),
         false,
       );
     });
@@ -168,18 +266,34 @@ describe("engine v2", () => {
 
   describe("wildcard / public subjects", () => {
     it("grants to everyone(type) authorize any subject of that type", async () => {
-      await authz.allow({ who: everyone("user"), toBe: "viewer", onWhat: { type: "document", id: "pub" } });
+      await authz.allow({
+        who: everyone("user"),
+        toBe: "viewer",
+        onWhat: { type: "document", id: "pub" },
+      });
       assert.equal(
-        await authz.check({ who: { type: "user", id: "anyone" }, canThey: "view", onWhat: { type: "document", id: "pub" } }),
+        await authz.check({
+          who: { type: "user", id: "anyone" },
+          canThey: "view",
+          onWhat: { type: "document", id: "pub" },
+        }),
         true,
       );
       assert.equal(
-        await authz.check({ who: { type: "user", id: "other" }, canThey: "view", onWhat: { type: "document", id: "pub" } }),
+        await authz.check({
+          who: { type: "user", id: "other" },
+          canThey: "view",
+          onWhat: { type: "document", id: "pub" },
+        }),
         true,
       );
       // viewer does not grant edit
       assert.equal(
-        await authz.check({ who: { type: "user", id: "anyone" }, canThey: "edit", onWhat: { type: "document", id: "pub" } }),
+        await authz.check({
+          who: { type: "user", id: "anyone" },
+          canThey: "edit",
+          onWhat: { type: "document", id: "pub" },
+        }),
         false,
       );
     });
@@ -191,18 +305,34 @@ describe("engine v2", () => {
         who: { type: "user", id: "ivy" },
         toBe: "viewer",
         onWhat: { type: "document", id: "p1" },
-        when: { attributes: [{ attribute: "dept", operator: "eq", value: "eng" }] },
+        when: {
+          attributes: [{ attribute: "dept", operator: "eq", value: "eng" }],
+        },
       });
       assert.equal(
-        await authz.check({ who: { type: "user", id: "ivy" }, canThey: "view", onWhat: { type: "document", id: "p1" }, context: { dept: "eng" } }),
+        await authz.check({
+          who: { type: "user", id: "ivy" },
+          canThey: "view",
+          onWhat: { type: "document", id: "p1" },
+          context: { dept: "eng" },
+        }),
         true,
       );
       assert.equal(
-        await authz.check({ who: { type: "user", id: "ivy" }, canThey: "view", onWhat: { type: "document", id: "p1" }, context: { dept: "sales" } }),
+        await authz.check({
+          who: { type: "user", id: "ivy" },
+          canThey: "view",
+          onWhat: { type: "document", id: "p1" },
+          context: { dept: "sales" },
+        }),
         false,
       );
       assert.equal(
-        await authz.check({ who: { type: "user", id: "ivy" }, canThey: "view", onWhat: { type: "document", id: "p1" } }),
+        await authz.check({
+          who: { type: "user", id: "ivy" },
+          canThey: "view",
+          onWhat: { type: "document", id: "p1" },
+        }),
         false,
       );
     });
@@ -214,13 +344,37 @@ describe("engine v2", () => {
       const a = new AuthSystem({ storage: counting, schema });
 
       // Diamond: alice in g0a and g0b; both members of mid; mid views doc.
-      await a.allow({ who: { type: "team", id: "mid" }, toBe: "viewer", onWhat: { type: "document", id: "dia" } });
-      await a.addMember({ member: { type: "team", id: "g0a" }, group: { type: "team", id: "mid" }, as: "member" });
-      await a.addMember({ member: { type: "team", id: "g0b" }, group: { type: "team", id: "mid" }, as: "member" });
-      await a.addMember({ member: { type: "user", id: "alice" }, group: { type: "team", id: "g0a" }, as: "member" });
-      await a.addMember({ member: { type: "user", id: "alice" }, group: { type: "team", id: "g0b" }, as: "member" });
+      await a.allow({
+        who: { type: "team", id: "mid" },
+        toBe: "viewer",
+        onWhat: { type: "document", id: "dia" },
+      });
+      await a.addMember({
+        member: { type: "team", id: "g0a" },
+        group: { type: "team", id: "mid" },
+        as: "member",
+      });
+      await a.addMember({
+        member: { type: "team", id: "g0b" },
+        group: { type: "team", id: "mid" },
+        as: "member",
+      });
+      await a.addMember({
+        member: { type: "user", id: "alice" },
+        group: { type: "team", id: "g0a" },
+        as: "member",
+      });
+      await a.addMember({
+        member: { type: "user", id: "alice" },
+        group: { type: "team", id: "g0b" },
+        as: "member",
+      });
       assert.equal(
-        await a.check({ who: { type: "user", id: "alice" }, canThey: "view", onWhat: { type: "document", id: "dia" } }),
+        await a.check({
+          who: { type: "user", id: "alice" },
+          canThey: "view",
+          onWhat: { type: "document", id: "dia" },
+        }),
         true,
       );
 
@@ -230,7 +384,11 @@ describe("engine v2", () => {
       const WIDTH = 2;
       const LAYERS = 10;
       for (let i = 0; i < WIDTH; i++) {
-        await b.addMember({ member: { type: "user", id: "zoe" }, group: { type: "team", id: `L0_${i}` }, as: "member" });
+        await b.addMember({
+          member: { type: "user", id: "zoe" },
+          group: { type: "team", id: `L0_${i}` },
+          as: "member",
+        });
       }
       for (let layer = 0; layer < LAYERS - 1; layer++) {
         for (let i = 0; i < WIDTH; i++) {
@@ -244,7 +402,11 @@ describe("engine v2", () => {
         }
       }
       lat.findCalls = 0;
-      const result = await b.check({ who: { type: "user", id: "zoe" }, canThey: "view", onWhat: { type: "document", id: "none" } });
+      const result = await b.check({
+        who: { type: "user", id: "zoe" },
+        canThey: "view",
+        onWhat: { type: "document", id: "none" },
+      });
       assert.equal(result, false);
       // Memoized traversal is linear in distinct nodes (~290 here); without
       // memoization a 10-deep width-2 lattice would be exponential (thousands).
@@ -257,7 +419,11 @@ describe("engine v2", () => {
 
   describe("depth behavior", () => {
     const buildChain = async (a: AuthSystem<typeof schema>, depth: number) => {
-      await a.addMember({ member: { type: "user", id: "kim" }, group: { type: "team", id: "c0" }, as: "member" });
+      await a.addMember({
+        member: { type: "user", id: "kim" },
+        group: { type: "team", id: "c0" },
+        as: "member",
+      });
       for (let i = 0; i < depth; i++) {
         await a.addMember({
           member: { type: "team", id: `c${i}` },
@@ -277,7 +443,11 @@ describe("engine v2", () => {
       });
       await buildChain(a, 6);
       await assert.rejects(
-        a.check({ who: { type: "user", id: "kim" }, canThey: "view", onWhat: { type: "document", id: "z" } }),
+        a.check({
+          who: { type: "user", id: "kim" },
+          canThey: "view",
+          onWhat: { type: "document", id: "z" },
+        }),
         MaxDepthExceededError,
       );
     });
@@ -293,7 +463,11 @@ describe("engine v2", () => {
       });
       await buildChain(a, 6);
       assert.equal(
-        await a.check({ who: { type: "user", id: "kim" }, canThey: "view", onWhat: { type: "document", id: "z" } }),
+        await a.check({
+          who: { type: "user", id: "kim" },
+          canThey: "view",
+          onWhat: { type: "document", id: "z" },
+        }),
         false,
       );
       assert.ok(warnings.length > 0, "Expected a depth warning to be logged");
@@ -302,11 +476,27 @@ describe("engine v2", () => {
 
   describe("cycle safety", () => {
     it("terminates on a membership cycle", async () => {
-      await authz.addMember({ member: { type: "team", id: "a" }, group: { type: "team", id: "b" }, as: "member" });
-      await authz.addMember({ member: { type: "team", id: "b" }, group: { type: "team", id: "a" }, as: "member" });
-      await authz.addMember({ member: { type: "user", id: "lee" }, group: { type: "team", id: "a" }, as: "member" });
+      await authz.addMember({
+        member: { type: "team", id: "a" },
+        group: { type: "team", id: "b" },
+        as: "member",
+      });
+      await authz.addMember({
+        member: { type: "team", id: "b" },
+        group: { type: "team", id: "a" },
+        as: "member",
+      });
+      await authz.addMember({
+        member: { type: "user", id: "lee" },
+        group: { type: "team", id: "a" },
+        as: "member",
+      });
       assert.equal(
-        await authz.check({ who: { type: "user", id: "lee" }, canThey: "view", onWhat: { type: "document", id: "nope" } }),
+        await authz.check({
+          who: { type: "user", id: "lee" },
+          canThey: "view",
+          onWhat: { type: "document", id: "nope" },
+        }),
         false,
       );
     });

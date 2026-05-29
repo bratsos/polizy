@@ -4,11 +4,11 @@ import type {
   AnyObject,
   Condition,
   InputTuple,
+  ObjectType,
   Relation,
   StoredTuple,
   Subject,
   SubjectType,
-  ObjectType,
 } from "./types";
 
 /**

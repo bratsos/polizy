@@ -1,11 +1,11 @@
 import type {
   AnyObject,
   InputTuple,
+  ObjectType,
   Relation,
   StoredTuple,
   Subject,
   SubjectType,
-  ObjectType,
 } from "./types";
 
 export interface StorageAdapter<

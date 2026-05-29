@@ -1,9 +1,9 @@
-import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { AuthSystem } from "../polizy.ts";
+import { beforeEach, describe, it } from "node:test";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
-import { defineSchema } from "../types.ts";
+import { AuthSystem } from "../polizy.ts";
 import type { SchemaObjectTypes, SchemaSubjectTypes } from "../types.ts";
+import { defineSchema } from "../types.ts";
 
 const schema = defineSchema({
   subjectTypes: ["user"],
@@ -45,7 +45,9 @@ describe("write APIs", () => {
         toBe: "owner",
         onWhat: { type: "document", id: "d1" },
       });
-      const tuples = await authz.listTuples({ subject: { type: "user", id: "a" } });
+      const tuples = await authz.listTuples({
+        subject: { type: "user", id: "a" },
+      });
       assert.equal(tuples.length, 1);
     });
   });
@@ -53,8 +55,16 @@ describe("write APIs", () => {
   describe("allowMany", () => {
     it("writes multiple grants and returns them aligned", async () => {
       const written = await authz.allowMany([
-        { who: { type: "user", id: "a" }, toBe: "owner", onWhat: { type: "document", id: "d1" } },
-        { who: { type: "user", id: "b" }, toBe: "viewer", onWhat: { type: "document", id: "d2" } },
+        {
+          who: { type: "user", id: "a" },
+          toBe: "owner",
+          onWhat: { type: "document", id: "d1" },
+        },
+        {
+          who: { type: "user", id: "b" },
+          toBe: "viewer",
+          onWhat: { type: "document", id: "d2" },
+        },
       ]);
       assert.equal(written.length, 2);
       assert.equal(
@@ -83,7 +93,10 @@ describe("write APIs", () => {
         toBe: "viewer",
         onWhat: { type: "document", id: "d1" },
       });
-      await authz.addMember({ member: { type: "user", id: "a" }, group: { type: "team", id: "t" } });
+      await authz.addMember({
+        member: { type: "user", id: "a" },
+        group: { type: "team", id: "t" },
+      });
       assert.equal(
         await authz.check({
           who: { type: "user", id: "a" },
@@ -92,7 +105,10 @@ describe("write APIs", () => {
         }),
         true,
       );
-      await authz.removeMember({ member: { type: "user", id: "a" }, group: { type: "team", id: "t" } });
+      await authz.removeMember({
+        member: { type: "user", id: "a" },
+        group: { type: "team", id: "t" },
+      });
       assert.equal(
         await authz.check({
           who: { type: "user", id: "a" },
@@ -150,7 +166,9 @@ describe("write APIs", () => {
         toBe: "viewer",
         onWhat: { type: "document", id: "d2" },
       });
-      const removed = await authz.disallowAllMatching({ who: { type: "user", id: "a" } });
+      const removed = await authz.disallowAllMatching({
+        who: { type: "user", id: "a" },
+      });
       assert.equal(removed, 2);
       const none = await authz.disallowAllMatching({});
       assert.equal(none, 0);

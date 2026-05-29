@@ -1,9 +1,9 @@
-import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert";
-import { AuthSystem } from "../polizy.ts";
+import { beforeEach, describe, test } from "node:test";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
-import { defineSchema } from "../types.ts";
+import { AuthSystem } from "../polizy.ts";
 import type { AccessibleObject } from "../types.ts";
+import { defineSchema } from "../types.ts";
 
 const testSchema = defineSchema({
   subjectTypes: ["user", "team"],
