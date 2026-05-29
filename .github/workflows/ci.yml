@@ -1,30 +1,45 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches: [main]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  pull_request:
+    branches: [main]
 
 jobs:
-  build-test:
+  ci:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: "file:./dev.db" # SQLite file for the Prisma adapter test suite
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4 # reads packageManager from package.json
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Lint & format (Biome)
-        run: pnpm biome ci packages/polizy/src
-      - name: Build library
-        run: pnpm --filter polizy build
-      - name: Test library (in-memory + Prisma adapters)
-        run: pnpm --filter polizy test
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm biome check .
+
+      - name: Type check
+        run: pnpm tsc --noEmit
+        working-directory: packages/polizy
+
+      - name: Test
+        run: pnpm test
+        working-directory: packages/polizy
+        env:
+          # Tests run with in-memory storage by default
+          NODE_ENV: test
+
+      - name: Build
+        run: pnpm build
+        working-directory: packages/polizy

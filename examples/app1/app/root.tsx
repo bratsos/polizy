@@ -1,3 +1,4 @@
+import { SymbiosisProvider } from "@synopsisapp/symbiosis-ui";
 import {
   isRouteErrorResponse,
   Links,
@@ -6,7 +7,6 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
-import { SymbiosisProvider } from "@synopsisapp/symbiosis-ui";
 
 import "./app.css";
 

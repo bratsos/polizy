@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client-generated";
-import { defineSchema, AuthSystem } from "polizy";
+import { AuthSystem, defineSchema } from "polizy";
 import { PrismaStorageAdapter } from "polizy/prisma-storage";
 
 const prisma = new PrismaClient();

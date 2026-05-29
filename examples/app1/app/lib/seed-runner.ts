@@ -1,4 +1,4 @@
-import { seedDatabase, prisma } from "./polizy.server";
+import { prisma, seedDatabase } from "./polizy.server";
 
 async function main() {
   console.log("Starting seed runner...");

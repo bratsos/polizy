@@ -1,6 +1,6 @@
+import { Button, TextField } from "@synopsisapp/symbiosis-ui";
 import React from "react";
 import { Form, Link } from "react-router";
-import { Button, TextField } from "@synopsisapp/symbiosis-ui";
 import type { ResourceData } from "../routes/home";
 
 const ALL_POSSIBLE_ACTIONS = [
@@ -20,7 +20,7 @@ interface UserResourceViewProps {
 const renderActionButtons = (
   resource: ResourceData,
   userId: string,
-  allowedActions: Action[]
+  allowedActions: Action[],
 ) => {
   return (
     <span className="space-x-1 flex-shrink-0 ml-2">
@@ -58,7 +58,7 @@ const renderActionButtons = (
               onSubmit={(event) => {
                 if (
                   !confirm(
-                    `Are you sure you want to delete ${resource.type} "${resource.name}"? This cannot be undone.`
+                    `Are you sure you want to delete ${resource.type} "${resource.name}"? This cannot be undone.`,
                   )
                 ) {
                   event.preventDefault();
@@ -114,14 +114,14 @@ const renderResourcesRecursive = (
   parentId: string | null,
   allResources: ResourceData[],
   userId: string,
-  level = 0
+  level = 0,
 ): JSX.Element[] => {
   const children = allResources
 
     .filter((r) =>
       parentId === null
         ? r.parent === undefined || r.parent === null
-        : r.parent === parentId
+        : r.parent === parentId,
     )
     .sort((a, b) => {
       const typeOrder = { folder: 1, document: 2, team: 3 };
@@ -158,7 +158,7 @@ const renderResourcesRecursive = (
             resource.id,
             allResources,
             userId,
-            level + 1
+            level + 1,
           )}
         </ul>
       )}
