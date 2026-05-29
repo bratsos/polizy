@@ -692,6 +692,8 @@ describe("AuthSystem Core Tests", () => {
 
     describe("Field-Specific Permissions", () => {
       const schema = defineSchema({
+        subjectTypes: ["user", "group"],
+        objectTypes: ["doc", "folder", "org", "group", "system"],
         relations: { viewer: { type: "direct" } },
         actionToRelations: { view: ["viewer"] },
         fieldLevelObjects: ["doc"],

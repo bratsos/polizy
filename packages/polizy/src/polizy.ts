@@ -82,6 +82,8 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     defaultCheckDepth?: number;
     maxDepthBehavior?: "throw" | "deny";
     logger?: Logger;
+    /** Overrides the schema's field separator (defaults to the schema's, then "#"). */
+    fieldSeparator?: string;
   }) {
     if (!config.storage)
       throw new ConfigurationError("Storage adapter is required.");
@@ -93,7 +95,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     this.defaultCheckDepth = config.defaultCheckDepth ?? 20;
     this.maxDepthBehavior = config.maxDepthBehavior ?? "throw";
     this.logger = config.logger ?? noopLogger;
-    this.fieldSep = fieldSeparator(this.schema);
+    this.fieldSep = config.fieldSeparator ?? fieldSeparator(this.schema);
     this.groupRels = groupRelations(this.schema);
     this.hierRels = hierarchyRelations(this.schema);
   }

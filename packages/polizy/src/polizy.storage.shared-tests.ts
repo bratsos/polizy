@@ -334,9 +334,9 @@ export function defineStorageAdapterTestSuite(
 
     it("write() is idempotent on the (subject, relation, object) key", async () => {
       const tuple = {
-        subject: { type: "user", id: "ida" },
+        subject: { type: "user" as const, id: "ida" },
         relation: "viewer" as const,
-        object: { type: "document", id: "idoc" },
+        object: { type: "document" as const, id: "idoc" },
       };
       await adapter.write([tuple]);
       await adapter.write([

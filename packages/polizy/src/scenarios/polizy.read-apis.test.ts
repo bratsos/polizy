@@ -4,21 +4,11 @@ import { AuthSystem } from "../polizy.ts";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { defineSchema, everyone } from "../types.ts";
 import { NotAuthorizedError } from "../errors.ts";
-import type { InputTuple } from "../types.ts";
-
-/** Counts findTuples calls and how many used an empty (full-scan) filter. */
-class ScanCountingAdapter extends InMemoryStorageAdapter<string, string> {
-  public emptyFilterCalls = 0;
-  async findTuples(
-    filter: Partial<InputTuple<string, string>>,
-    options?: { limit?: number; offset?: number },
-  ) {
-    if (!filter.subject && !filter.relation && !filter.object) {
-      this.emptyFilterCalls++;
-    }
-    return super.findTuples(filter, options);
-  }
-}
+import type {
+  InputTuple,
+  SchemaObjectTypes,
+  SchemaSubjectTypes,
+} from "../types.ts";
 
 const schema = defineSchema({
   subjectTypes: ["user"],
@@ -38,27 +28,43 @@ const schema = defineSchema({
   hierarchyPropagation: { view: ["view"], edit: ["edit"], delete: [] },
 });
 
-const u = (id: string) => ({ type: "user" as const, id });
-const doc = (id: string) => ({ type: "document" as const, id });
-const folder = (id: string) => ({ type: "folder" as const, id });
-const team = (id: string) => ({ type: "team" as const, id });
+type Subj = SchemaSubjectTypes<typeof schema>;
+type Obj = SchemaObjectTypes<typeof schema>;
+
+/** Counts findTuples calls and how many used an empty (full-scan) filter. */
+class ScanCountingAdapter extends InMemoryStorageAdapter<Subj, Obj> {
+  public emptyFilterCalls = 0;
+  override async findTuples(
+    filter: Partial<InputTuple<Subj, Obj>>,
+    options?: { limit?: number; offset?: number },
+  ) {
+    if (!filter.subject && !filter.relation && !filter.object) {
+      this.emptyFilterCalls++;
+    }
+    return super.findTuples(filter, options);
+  }
+}
 
 describe("read APIs", () => {
-  let storage: InMemoryStorageAdapter<string, string>;
+  let storage: InMemoryStorageAdapter<Subj, Obj>;
   let authz: AuthSystem<typeof schema>;
 
   beforeEach(() => {
-    storage = new InMemoryStorageAdapter();
+    storage = new InMemoryStorageAdapter<Subj, Obj>();
     authz = new AuthSystem({ storage, schema });
   });
 
   describe("checkMany", () => {
     it("returns booleans aligned with the requests", async () => {
-      await authz.allow({ who: u("a"), toBe: "owner", onWhat: doc("d1") });
+      await authz.allow({
+        who: { type: "user", id: "a" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d1" },
+      });
       const results = await authz.checkMany([
-        { who: u("a"), canThey: "edit", onWhat: doc("d1") },
-        { who: u("a"), canThey: "edit", onWhat: doc("d2") },
-        { who: u("a"), canThey: "view", onWhat: doc("d1") },
+        { who: { type: "user", id: "a" }, canThey: "edit", onWhat: { type: "document", id: "d1" } },
+        { who: { type: "user", id: "a" }, canThey: "edit", onWhat: { type: "document", id: "d2" } },
+        { who: { type: "user", id: "a" }, canThey: "view", onWhat: { type: "document", id: "d1" } },
       ]);
       assert.deepEqual(results, [true, false, true]);
     });
@@ -66,15 +72,23 @@ describe("read APIs", () => {
 
   describe("checkOrThrow", () => {
     it("resolves when allowed and throws NotAuthorizedError when denied", async () => {
-      await authz.allow({ who: u("b"), toBe: "owner", onWhat: doc("d1") });
+      await authz.allow({
+        who: { type: "user", id: "b" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d1" },
+      });
       await assert.doesNotReject(
-        authz.checkOrThrow({ who: u("b"), canThey: "edit", onWhat: doc("d1") }),
+        authz.checkOrThrow({
+          who: { type: "user", id: "b" },
+          canThey: "edit",
+          onWhat: { type: "document", id: "d1" },
+        }),
       );
       await assert.rejects(
         authz.checkOrThrow({
-          who: u("b"),
+          who: { type: "user", id: "b" },
           canThey: "delete",
-          onWhat: doc("d2"),
+          onWhat: { type: "document", id: "d2" },
         }),
         NotAuthorizedError,
       );
@@ -83,60 +97,75 @@ describe("read APIs", () => {
 
   describe("explain", () => {
     it("explains a direct grant", async () => {
-      await authz.allow({ who: u("c"), toBe: "owner", onWhat: doc("d1") });
+      await authz.allow({
+        who: { type: "user", id: "c" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d1" },
+      });
       const r = await authz.explain({
-        who: u("c"),
+        who: { type: "user", id: "c" },
         canThey: "edit",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "direct");
     });
+
     it("explains a denial with via null", async () => {
       const r = await authz.explain({
-        who: u("c"),
+        who: { type: "user", id: "c" },
         canThey: "edit",
-        onWhat: doc("none"),
+        onWhat: { type: "document", id: "none" },
       });
       assert.equal(r.allowed, false);
       assert.equal(r.via, null);
     });
+
     it("explains a group grant", async () => {
       await authz.allow({
-        who: team("t") as any,
+        who: { type: "team", id: "t" },
         toBe: "viewer",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
-      await authz.addMember({ member: u("c"), group: team("t") });
+      await authz.addMember({ member: { type: "user", id: "c" }, group: { type: "team", id: "t" } });
       const r = await authz.explain({
-        who: u("c"),
+        who: { type: "user", id: "c" },
         canThey: "view",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "group");
     });
+
     it("explains a hierarchy grant", async () => {
-      await authz.allow({ who: u("c"), toBe: "viewer", onWhat: folder("f") });
-      await authz.setParent({ child: doc("d1"), parent: folder("f") });
+      await authz.allow({
+        who: { type: "user", id: "c" },
+        toBe: "viewer",
+        onWhat: { type: "folder", id: "f" },
+      });
+      await authz.setParent({
+        child: { type: "document", id: "d1" },
+        parent: { type: "folder", id: "f" },
+      });
       const r = await authz.explain({
-        who: u("c"),
+        who: { type: "user", id: "c" },
         canThey: "view",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "hierarchy");
     });
+
     it("explains a wildcard grant", async () => {
       await authz.allow({
         who: everyone("user"),
         toBe: "viewer",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       const r = await authz.explain({
-        who: u("z"),
+        who: { type: "user", id: "z" },
         canThey: "view",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "wildcard");
@@ -144,32 +173,41 @@ describe("read APIs", () => {
   });
 
   describe("listSubjects (reverse expand)", () => {
-    it("returns direct holders, group members, and hierarchy descendants' grantees", async () => {
+    it("returns direct holders and group members", async () => {
       await authz.allow({
-        who: u("direct"),
+        who: { type: "user", id: "direct" },
         toBe: "viewer",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       await authz.allow({
-        who: team("t") as any,
+        who: { type: "team", id: "t" },
         toBe: "viewer",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
-      await authz.addMember({ member: u("viaGroup"), group: team("t") });
+      await authz.addMember({ member: { type: "user", id: "viaGroup" }, group: { type: "team", id: "t" } });
       const subjects = await authz.listSubjects({
         canThey: "view",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
       });
       const ids = subjects.map((s) => s.id).sort();
       assert.ok(ids.includes("direct"), "direct holder missing");
       assert.ok(ids.includes("viaGroup"), "group member missing");
     });
+
     it("honors the ofType filter and dedupes", async () => {
-      await authz.allow({ who: u("x"), toBe: "owner", onWhat: doc("d1") });
-      await authz.allow({ who: u("x"), toBe: "viewer", onWhat: doc("d1") });
+      await authz.allow({
+        who: { type: "user", id: "x" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d1" },
+      });
+      await authz.allow({
+        who: { type: "user", id: "x" },
+        toBe: "viewer",
+        onWhat: { type: "document", id: "d1" },
+      });
       const subjects = await authz.listSubjects({
         canThey: "view",
-        onWhat: doc("d1"),
+        onWhat: { type: "document", id: "d1" },
         ofType: "user",
       });
       assert.equal(
@@ -184,11 +222,19 @@ describe("read APIs", () => {
     it("returns accessible objects with their actions, without a full-table scan", async () => {
       const scan = new ScanCountingAdapter();
       const a = new AuthSystem({ storage: scan, schema });
-      await a.allow({ who: u("o"), toBe: "owner", onWhat: doc("d1") });
-      await a.allow({ who: u("o"), toBe: "viewer", onWhat: doc("d2") });
+      await a.allow({
+        who: { type: "user", id: "o" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d1" },
+      });
+      await a.allow({
+        who: { type: "user", id: "o" },
+        toBe: "viewer",
+        onWhat: { type: "document", id: "d2" },
+      });
       scan.emptyFilterCalls = 0;
       const { accessible } = await a.listAccessibleObjects({
-        who: u("o"),
+        who: { type: "user", id: "o" },
         ofType: "document",
       });
       const ids = accessible.map((x) => x.object.id).sort();
@@ -201,11 +247,20 @@ describe("read APIs", () => {
         "must not perform an empty-filter full-table scan",
       );
     });
+
     it("filters by canThey when provided", async () => {
-      await authz.allow({ who: u("o"), toBe: "viewer", onWhat: doc("d1") });
-      await authz.allow({ who: u("o"), toBe: "owner", onWhat: doc("d2") });
+      await authz.allow({
+        who: { type: "user", id: "o" },
+        toBe: "viewer",
+        onWhat: { type: "document", id: "d1" },
+      });
+      await authz.allow({
+        who: { type: "user", id: "o" },
+        toBe: "owner",
+        onWhat: { type: "document", id: "d2" },
+      });
       const { accessible } = await authz.listAccessibleObjects({
-        who: u("o"),
+        who: { type: "user", id: "o" },
         ofType: "document",
         canThey: "edit",
       });
@@ -220,13 +275,13 @@ describe("read APIs", () => {
     it("applies limit and offset", async () => {
       for (let i = 0; i < 5; i++) {
         await authz.allow({
-          who: u(`u${i}`),
+          who: { type: "user", id: `u${i}` },
           toBe: "viewer",
-          onWhat: doc("shared"),
+          onWhat: { type: "document", id: "shared" },
         });
       }
       const page = await authz.listTuples(
-        { object: doc("shared") },
+        { object: { type: "document", id: "shared" } },
         { limit: 2, offset: 1 },
       );
       assert.equal(page.length, 2);
