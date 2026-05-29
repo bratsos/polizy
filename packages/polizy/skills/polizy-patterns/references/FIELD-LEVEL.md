@@ -36,7 +36,7 @@ they don't subtract from it.
 
 ## Schema Setup (opt-in)
 
-**Field-level ids are opt-in in 0.2.0.** List every object type that uses field
+**Field-level ids are opt-in in 0.3.0.** List every object type that uses field
 ids in `fieldLevelObjects`. Types you don't list never split on the separator,
 so ids that naturally contain `#` can't accidentally inherit access.
 
@@ -65,7 +65,7 @@ const authz = new AuthSystem({
 
 If a type is **not** in `fieldLevelObjects`, an id like `emp123#salary` is treated
 as a literal opaque id — no base fallback. If you relied on `#` inheritance in
-0.1.x and don't add the type here, those checks now return `false`.
+0.2.x and earlier and don't add the type here, those checks now return `false`.
 
 ## Basic Field-Level Pattern
 
@@ -470,7 +470,7 @@ return { employee: data };
 
 ### Don't: Grant the base record to subjects who shouldn't see every field
 
-In 0.2.0 a base grant authorizes **all** fields. Granting the base "to be safe"
+In 0.3.0 a base grant authorizes **all** fields. Granting the base "to be safe"
 silently exposes salary/PII.
 
 ```typescript

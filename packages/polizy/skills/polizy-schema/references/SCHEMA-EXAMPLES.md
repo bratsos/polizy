@@ -111,7 +111,7 @@ const schema = defineSchema({
     editor: { type: "direct" },
     viewer: { type: "direct" },
 
-    // Structure — two membership axes and two containment axes (0.2.0
+    // Structure — two membership axes and two containment axes (0.3.0
     // supports multiple group/hierarchy relations; check() traverses all).
     member: { type: "group" },         // user → team
     orgMember: { type: "group" },      // user → organization

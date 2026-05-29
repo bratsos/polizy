@@ -1,6 +1,6 @@
 # Prisma Adapter Setup
 
-Complete guide for setting up the Prisma storage adapter (`polizy 0.2.0`).
+Complete guide for setting up the Prisma storage adapter (`polizy 0.3.0`).
 
 The adapter is exported from the **`polizy/prisma-storage`** subpath (so the core
 entry never pulls in `@prisma/client`) and is a **factory function**, not a
@@ -8,7 +8,7 @@ class. `PrismaStorageAdapter` and `PrismaAdapter` are the same function under tw
 names.
 
 ```ts
-// ✅ 0.2.0
+// ✅ 0.3.0
 import { PrismaStorageAdapter } from "polizy/prisma-storage"; // alias of PrismaAdapter
 const storage = PrismaStorageAdapter(new PrismaClient());     // call it — no `new`
 
@@ -49,7 +49,7 @@ model PolizyTuple {
   // Optional conditions: { validSince?, validUntil?, attributes? }
   condition Json?
 
-  // REQUIRED in 0.2.0 — the adapter upserts on this key for idempotent writes.
+  // REQUIRED in 0.3.0 — the adapter upserts on this key for idempotent writes.
   @@unique([subjectType, subjectId, relation, objectType, objectId])
 
   // Hot-path indexes: "what does this subject have?" / "who has this object?"
@@ -59,9 +59,9 @@ model PolizyTuple {
 ```
 
 > The `@@unique([subjectType, subjectId, relation, objectType, objectId])`
-> constraint is **required** in 0.2.0. Writes are implemented as an
+> constraint is **required** in 0.3.0. Writes are implemented as an
 > upsert-in-transaction keyed on it; without the constraint the upsert has no
-> target and idempotent grants cannot work. If you are upgrading from 0.1.x and
+> target and idempotent grants cannot work. If you are upgrading from 0.2.x and earlier and
 > have duplicate rows, dedupe before migrating or the constraint will fail to
 > apply (see the migration guide).
 
@@ -104,7 +104,7 @@ There is no option to point it at a differently named model — the factory take
 only a `PrismaClient` (or an extended client). Keep the model named
 `PolizyTuple`.
 
-## Adapter Behavior (0.2.0)
+## Adapter Behavior (0.3.0)
 
 The Prisma adapter is held to the same shared contract as the in-memory adapter:
 
@@ -117,13 +117,13 @@ The Prisma adapter is held to the same shared contract as the in-memory adapter:
 - **Conditions survive the round trip.** `condition` is a JSON column, and JSON
   has no `Date`. On read, the adapter revives `validSince`/`validUntil` from ISO
   strings back to `Date` so the engine's condition logic gets the type it
-  expects. (In 0.1.x these stayed strings and `check()` threw on time-based
+  expects. (In 0.2.x and earlier these stayed strings and `check()` threw on time-based
   grants — that is fixed.)
 - **`delete()` does not over-delete.** The filter means
   `(who? subject==who) AND (was? relation==was) AND (onWhat? object==onWhat OR subject==onWhat)`.
   An explicit `who` is AND-ed and never dropped, so single-tuple revocations
   (`removeParent`, `removeMember`) no longer remove unrelated rows the way the
-  0.1.x adapter's `who`-dropping `OR` did.
+  0.2.x and earlier adapter's `who`-dropping `OR` did.
 - **Pagination.** `findTuples(filter, { limit, offset })` maps to Prisma
   `take`/`skip` with a stable `orderBy: { id: "asc" }`, so paging `listTuples`
   is deterministic.
@@ -359,7 +359,7 @@ If you DO hit one:
   `@@unique([subjectType, subjectId, relation, objectType, objectId])`. If you
   see "no target for upsert" or a duplicate-row error, the constraint isn't in
   the database — run `npx prisma migrate dev` (or `db push`).
-- **Duplicate rows from 0.1.x.** The constraint migration fails until you dedupe
+- **Duplicate rows from 0.2.x and earlier.** The constraint migration fails until you dedupe
   pre-existing duplicates. Delete them first (see the migration guide), then
   migrate.
 - **Hand-written `create`.** If your own code inserts tuples with `create`

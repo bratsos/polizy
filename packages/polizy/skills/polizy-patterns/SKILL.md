@@ -4,7 +4,7 @@ description: Implementation patterns for polizy authorization. Use when implemen
 license: MIT
 metadata:
   author: bratsos
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -38,7 +38,7 @@ Copy-paste patterns for common authorization scenarios.
 | Share dialog / access audit | Reverse expansion | [Pattern 12](#pattern-12-who-can-access-this-listsubjects) |
 | Debugging "why allowed/denied" | Explain | [Pattern 13](#pattern-13-debugging-with-explain) |
 
-> **0.2.0 quick notes used throughout these patterns**
+> **0.3.0 quick notes used throughout these patterns**
 >
 > - `allow()`, `addMember()`, and `setParent()` are **idempotent** on
 >   `(subject, relation, object)`. Re-granting the same triple updates the
@@ -164,7 +164,7 @@ hierarchyPropagation: {
 ## Pattern 4: Field-Level Permissions
 
 Grant access to specific fields within a record. **Field-level ids are opt-in in
-0.2.0** — list the object types that use them in `fieldLevelObjects`:
+0.3.0** — list the object types that use them in `fieldLevelObjects`:
 
 ```typescript
 const schema = defineSchema({
@@ -249,7 +249,7 @@ await authz.allow({
 });
 ```
 
-> **0.2.0 gotcha:** `allow()` is idempotent on `(subject, relation, object)`. You
+> **0.3.0 gotcha:** `allow()` is idempotent on `(subject, relation, object)`. You
 > can NOT have a standing grant and a temporary grant on the **same triple** —
 > the second call overwrites the first's condition. Model "standing + temporary"
 > with **distinct relations**:
@@ -269,7 +269,7 @@ await authz.allow({
 
 ## Pattern 6: Revocation
 
-Remove permissions. In 0.2.0 these deletes are **precise** — a single-tuple
+Remove permissions. In 0.3.0 these deletes are **precise** — a single-tuple
 `disallowAllMatching({ who, was, onWhat })`, `removeMember`, and `removeParent`
 no longer over-delete unrelated tuples on either adapter.
 

@@ -1,6 +1,6 @@
 # Common Issues and Solutions
 
-Detailed solutions for frequently encountered problems (polizy 0.2.0).
+Detailed solutions for frequently encountered problems (polizy 0.3.0).
 
 > **Fastest first step for any unexpected allow/deny:** call `explain()`. It
 > returns `{ allowed, via }` where `via` is the exact granting path (or `null`).
@@ -230,7 +230,7 @@ hierarchyPropagation: {
 
 ### Symptom
 
-A deep group or hierarchy chain **throws** (this is the 0.2.0 default):
+A deep group or hierarchy chain **throws** (this is the 0.3.0 default):
 
 ```typescript
 await authz.check({ ... });
@@ -238,7 +238,7 @@ await authz.check({ ... });
 //   "Authorization check exceeded maximum depth (20)."
 ```
 
-In 0.1.x this was a silent `false` at depth 10. In 0.2.0 `defaultCheckDepth` is
+In 0.2.x and earlier this was a silent `false` at depth 10. In 0.3.0 `defaultCheckDepth` is
 **20** and `maxDepthBehavior` defaults to **`"throw"`**.
 
 ### Diagnosis
@@ -326,9 +326,9 @@ await authz.check({ who: alice, canThey: "edit",
   onWhat: { type: "document", id: "doc1#salary" } }); // false??
 ```
 
-### Most Common Cause (0.2.0): the type isn't field-enabled
+### Most Common Cause (0.3.0): the type isn't field-enabled
 
-**Field ids are opt-in in 0.2.0.** A `#` in an id only splits into `base#field`
+**Field ids are opt-in in 0.3.0.** A `#` in an id only splits into `base#field`
 when the object **type** is listed in the schema's `fieldLevelObjects`. If it
 isn't, `doc1#salary` is treated as one opaque id with no base fallback — so a
 grant on `doc1` never reaches it.
@@ -343,8 +343,8 @@ const schema = defineSchema({
 });
 ```
 
-> In 0.1.x *any* id containing `#` inherited from its prefix — a privilege-bleed
-> risk for ids that naturally contain `#`. 0.2.0 makes it opt-in and safe by
+> In 0.2.x and earlier *any* id containing `#` inherited from its prefix — a privilege-bleed
+> risk for ids that naturally contain `#`. 0.3.0 makes it opt-in and safe by
 > default. If you relied on `#` inheritance, add the type to `fieldLevelObjects`.
 
 ### Other Causes
@@ -367,7 +367,7 @@ const schema = defineSchema({
 ### Note: base → field, not field → base
 
 Inheritance flows **down**: a grant on the base authorizes its fields (via
-direct, group, **and** hierarchy paths in 0.2.0). A grant on a *specific field*
+direct, group, **and** hierarchy paths in 0.3.0). A grant on a *specific field*
 stays scoped to that field and does **not** grant the base or sibling fields.
 
 ---
@@ -376,22 +376,22 @@ stays scoped to that field and does **not** grant the base or sibling fields.
 
 ### Wrong import / `new PrismaStorageAdapter(...)` fails
 
-In 0.2.0 the adapter lives on a subpath and is a **factory function** (no `new`):
+In 0.3.0 the adapter lives on a subpath and is a **factory function** (no `new`):
 
 ```typescript
-// ❌ never existed as 0.1.x docs implied
+// ❌ never existed as 0.2.x and earlier docs implied
 import { PrismaStorageAdapter } from "polizy";
 const storage = new PrismaStorageAdapter(prisma);
 
-// ✅ 0.2.0
+// ✅ 0.3.0
 import { PrismaStorageAdapter } from "polizy/prisma-storage";
 const storage = PrismaStorageAdapter(prisma); // call it, no `new`
 ```
 
 ### Migration fails on the `@@unique` constraint
 
-0.2.0 **requires** `@@unique([subjectType, subjectId, relation, objectType,
-objectId])` on `PolizyTuple` (it powers idempotent upserts). If 0.1.x left
+0.3.0 **requires** `@@unique([subjectType, subjectId, relation, objectType,
+objectId])` on `PolizyTuple` (it powers idempotent upserts). If 0.2.x and earlier left
 duplicate rows, the migration fails until you dedupe them first. See the
 migration guide for the dedupe SQL.
 
@@ -428,22 +428,22 @@ can't coexist on the same triple — use distinct relations (see Issue 12).
 
 ## Issue 7b: Time-Based Grants Throw / Never Expire on Prisma
 
-### Symptom (0.1.x)
+### Symptom (0.2.x and earlier)
 
 A grant with `validSince`/`validUntil` stored via the Prisma adapter made
 `check()` **throw**, or the window never applied.
 
 ### Cause
 
-0.1.x stored the condition `Date` in the JSON column and read it back as a
+0.2.x and earlier stored the condition `Date` in the JSON column and read it back as a
 **string**, breaking comparison.
 
 ### Fix
 
-**Upgrade to 0.2.0 and re-check.** Dates are now revived on read (`toMillis`
+**Upgrade to 0.3.0 and re-check.** Dates are now revived on read (`toMillis`
 accepts `Date`, ISO strings, and numbers), and `isConditionValid` is fail-closed
 (an unparseable date denies rather than throws). No code change needed beyond
-being on 0.2.0.
+being on 0.3.0.
 
 ---
 
@@ -642,7 +642,7 @@ When `temp_viewer` expires, the `viewer` tuple is untouched.
 
 ## Issue 13: Revocation Removed More Than Expected
 
-### Symptom (0.1.x, Prisma)
+### Symptom (0.2.x and earlier, Prisma)
 
 `removeParent`, `removeMember`, or a single-tuple `disallowAllMatching({ who,
 was, onWhat })` deleted extra tuples — e.g. removing a child's parent link also
@@ -650,12 +650,12 @@ dropped the parent's own parent link.
 
 ### Cause
 
-The 0.1.x Prisma adapter dropped the `who` constraint on delete, so the filter
+The 0.2.x and earlier Prisma adapter dropped the `who` constraint on delete, so the filter
 matched too broadly.
 
 ### Fix
 
-**Upgrade to 0.2.0.** Both adapters now delete by `who AND (object == onWhat OR
+**Upgrade to 0.3.0.** Both adapters now delete by `who AND (object == onWhat OR
 subject == onWhat)` identically. Re-verify your revocation paths after upgrading.
 
 ---
@@ -671,7 +671,7 @@ const schema = defineSchema({ ... });
 
 ### Cause
 
-0.2.0 validates the model at definition time (0.1.x only `console.warn`ed):
+0.3.0 validates the model at definition time (0.2.x and earlier only `console.warn`ed):
 
 - an action in `actionToRelations` maps to a **relation that isn't defined** in
   `relations`, or
@@ -700,7 +700,7 @@ hierarchyPropagation: {
 
 ### Symptom
 
-You relied on polizy printing depth/empty-filter warnings to `console`; in 0.2.0
+You relied on polizy printing depth/empty-filter warnings to `console`; in 0.3.0
 nothing appears.
 
 ### Cause

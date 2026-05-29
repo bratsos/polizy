@@ -4,7 +4,7 @@ description: Setup and installation guide for the polizy authorization library. 
 license: MIT
 metadata:
   author: bratsos
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -196,7 +196,7 @@ const authz = new AuthSystem({
 
   // Optional: what happens when a check exceeds defaultCheckDepth.
   //   "throw" (default) → throws MaxDepthExceededError
-  //   "deny"            → returns false (the silent behavior 0.1.x always had)
+  //   "deny"            → returns false (the silent behavior 0.2.x and earlier always had)
   maxDepthBehavior: "throw",
 
   // Optional: field separator for field-level permissions.
@@ -210,7 +210,7 @@ const authz = new AuthSystem({
 });
 ```
 
-> **0.2.0 changes:** the depth option is now controlled by `maxDepthBehavior:
+> **0.3.0 changes:** the depth option is now controlled by `maxDepthBehavior:
 > "throw" | "deny"` (the old `throwOnMaxDepth` boolean no longer exists), the
 > default depth rose from 10 to 20, and the library no longer logs to `console`
 > unless you pass a `logger`. Pass `maxDepthBehavior: "deny"` to keep the old
@@ -229,7 +229,7 @@ const authz = new AuthSystem({
 | `MaxDepthExceededError` thrown | A check exceeded `defaultCheckDepth` (20); deepen it, fix a cycle, or set `maxDepthBehavior: "deny"` |
 | Permission check returns false | Verify the relation is listed in `actionToRelations` for that action |
 
-## Already on polizy 0.1.x?
+## Already on polizy 0.2.x and earlier?
 
 If you are upgrading an existing project rather than setting up fresh, follow the
 migration guide instead of this skill — the Prisma import/factory and the

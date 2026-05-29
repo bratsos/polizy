@@ -4,7 +4,7 @@ description: Debug and fix polizy authorization issues. Use when permission chec
 license: MIT
 metadata:
   author: bratsos
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -207,8 +207,8 @@ await authz.addMember({ member: alice, group: team });
 **Symptom:** `check()` **throws** `MaxDepthExceededError` on a deep group or
 hierarchy chain.
 
-In 0.2.0 the default is `maxDepthBehavior: "throw"` and `defaultCheckDepth: 20`
-(was a silent `false` at depth 10 in 0.1.x). Throwing is intentional — a chain
+In 0.3.0 the default is `maxDepthBehavior: "throw"` and `defaultCheckDepth: 20`
+(was a silent `false` at depth 10 in 0.2.x and earlier). Throwing is intentional — a chain
 that long usually signals a data problem (e.g. an accidental cycle the cycle
 guard didn't short-circuit into a clean result, or genuinely over-nested groups).
 
@@ -269,16 +269,16 @@ for (const tuple of tuples) {
   `context` to `check()` — a missing/mismatched context value fails closed (denies).
   See COMMON-ISSUES Issue 11.
 
-> On 0.1.x, time conditions stored via the Prisma adapter round-tripped as
-> strings and made `check()` **throw**. That is fixed in 0.2.0 (dates are
-> revived). If you previously avoided conditions on Prisma, re-check on 0.2.0.
+> On 0.2.x and earlier, time conditions stored via the Prisma adapter round-tripped as
+> strings and made `check()` **throw**. That is fixed in 0.3.0 (dates are
+> revived). If you previously avoided conditions on Prisma, re-check on 0.3.0.
 
 ### 7. Temporary Grant Replaced a Standing Grant
 
 **Symptom:** You granted a permanent `viewer`, then later granted a time-boxed
 `viewer` with `when`. When the time box expires, the user loses access entirely.
 
-**Cause:** `allow()` is idempotent on `(subject, relation, object)` in 0.2.0.
+**Cause:** `allow()` is idempotent on `(subject, relation, object)` in 0.3.0.
 Re-granting the *same* triple updates its condition instead of adding a second
 tuple — the temporary `when` overwrote the standing grant.
 
@@ -387,7 +387,7 @@ console.log("Hierarchy:", await traceHierarchyPath("document", "doc1"));
 
 ### 5. Enable Logging
 
-**0.2.0 writes nothing to `console` by default.** If your old debugging relied on
+**0.3.0 writes nothing to `console` by default.** If your old debugging relied on
 polizy printing depth/empty-filter warnings, those are gone — pass a `logger` to
 surface them.
 
@@ -451,7 +451,7 @@ See [ANTI-PATTERNS.md](references/ANTI-PATTERNS.md) for detailed explanations:
 4. **Checking after action** - Check before
 5. **Not handling authorization errors** - Show feedback
 6. **Expecting deny tuples** - The model is grants-only; revoke or narrow scope
-7. **`#` in ids without `fieldLevelObjects`** - Field ids are opt-in in 0.2.0
+7. **`#` in ids without `fieldLevelObjects`** - Field ids are opt-in in 0.3.0
 8. **One relation for temp + standing access** - `allow()` is idempotent; use distinct relations
 
 ## References

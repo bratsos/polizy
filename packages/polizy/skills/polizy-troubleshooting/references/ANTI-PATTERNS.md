@@ -1,6 +1,6 @@
 # Anti-Patterns: What NOT to Do
 
-Common mistakes that lead to problems (polizy 0.2.0). Avoid these patterns.
+Common mistakes that lead to problems (polizy 0.3.0). Avoid these patterns.
 
 ---
 
@@ -496,7 +496,7 @@ To remove access someone already has, **revoke the granting tuple** with
 // Object ids that naturally contain "#"
 const issue = { type: "ticket", id: "PROJ#42" };
 
-// Assuming a grant on a "#"-bearing id behaves like 0.1.x prefix inheritance,
+// Assuming a grant on a "#"-bearing id behaves like 0.2.x and earlier prefix inheritance,
 // OR assuming "ticket" splits when it isn't in fieldLevelObjects
 await authz.allow({ who: alice, toBe: "viewer", onWhat: { type: "ticket", id: "PROJ" } });
 await authz.check({ who: alice, canThey: "view",
@@ -505,14 +505,14 @@ await authz.check({ who: alice, canThey: "view",
 
 ### Why It's Bad
 
-In 0.2.0 the `#` separator only splits ids whose **type** is listed in
+In 0.3.0 the `#` separator only splits ids whose **type** is listed in
 `fieldLevelObjects`. Two ways this bites:
 
 - You *want* field inheritance but forgot to opt the type in → base grants don't
   reach `base#field`.
 - Your ids *happen* to contain `#` (commit shas, composite keys, ticket codes)
   and you accidentally opt that type in → unintended privilege bleed (the exact
-  0.1.x footgun this change closes).
+  0.2.x and earlier footgun this change closes).
 
 ### The Solution
 

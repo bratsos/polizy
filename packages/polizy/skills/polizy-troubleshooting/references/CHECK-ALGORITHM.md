@@ -1,6 +1,6 @@
 # The Check Algorithm
 
-Understanding how `authz.check()` evaluates permissions in polizy 0.2.0. This
+Understanding how `authz.check()` evaluates permissions in polizy 0.3.0. This
 mirrors `resolveAccess` in the engine, so debugging matches the real behavior.
 
 ## Overview
@@ -65,7 +65,7 @@ onWhat = { type: "note", id: "n1#x" }
 // targets = [ {type:"note", id:"n1#x"} ]   ← no split, no base fallback
 ```
 
-> **0.2.0 change:** field ids are **opt-in**. In 0.1.x *any* id containing `#`
+> **0.3.0 change:** field ids are **opt-in**. In 0.2.x and earlier *any* id containing `#`
 > inherited from its prefix. If a `doc1#field` check now denies where it used to
 > allow, the type is missing from `fieldLevelObjects`. See COMMON-ISSUES Issue 6.
 
@@ -112,7 +112,7 @@ For each group relation declared in the schema:
 
 Two important details:
 
-- **Every** group relation is traversed (0.2.0 supports multiple, e.g. `member`
+- **Every** group relation is traversed (0.3.0 supports multiple, e.g. `member`
   and `orgMember`).
 - The recursion passes the **original `onWhat`**, not the group — so the group's
   own field-base and hierarchy resolution apply. A group can reach a document
@@ -150,7 +150,7 @@ For each target (onWhat and, if applicable, its base):
 
 Key points:
 
-- **Every** hierarchy relation is traversed (0.2.0 supports multiple).
+- **Every** hierarchy relation is traversed (0.3.0 supports multiple).
 - The action can **change** as it climbs: `hierarchyPropagation: { comment:
   ["edit"] }` means "if you can `edit` the parent, you can `comment` on the
   child." The recursion asks the *parent action* on the parent.
@@ -197,9 +197,9 @@ Evaluation:
 Final result: true
 ```
 
-## Memoization & Cycle Safety (0.2.0)
+## Memoization & Cycle Safety (0.3.0)
 
-This is the biggest internal change from 0.1.x. A single `check()` carries one
+This is the biggest internal change from 0.2.x and earlier. A single `check()` carries one
 traversal state:
 
 ```typescript
@@ -233,8 +233,8 @@ correctly, and you never get a wrong `false` cached from a cycle.
 const authz = new AuthSystem({
   storage,
   schema,
-  defaultCheckDepth: 20,        // default 20 (was 10 in 0.1.x)
-  maxDepthBehavior: "throw",    // default "throw" (0.1.x was a silent false)
+  defaultCheckDepth: 20,        // default 20 (was 10 in 0.2.x and earlier)
+  maxDepthBehavior: "throw",    // default "throw" (0.2.x and earlier was a silent false)
 });
 ```
 
@@ -244,7 +244,7 @@ Each group/hierarchy hop increments `depth`. When `depth` exceeds
 - `maxDepthBehavior: "throw"` (default) → throws `MaxDepthExceededError`
   carrying `subject`, `action`, `object`, and `depth`.
 - `maxDepthBehavior: "deny"` → logs via `logger.warn` (if a logger was provided)
-  and returns an *unstable* `false` (not memoized) — the 0.1.x behavior.
+  and returns an *unstable* `false` (not memoized) — the 0.2.x and earlier behavior.
 
 > A depth cutoff yields an unstable `false` for the same reason a cycle does: it
 > reflects the current stack, not a path-independent answer, so it is never
@@ -273,7 +273,7 @@ rather than aborting the surrounding check. So a grant whose predicate reference
 a context key you forgot to pass simply doesn't apply; the check continues down
 other paths and may still end in `false`.
 
-> **0.2.0 fix:** time conditions stored through the Prisma adapter previously
+> **0.3.0 fix:** time conditions stored through the Prisma adapter previously
 > round-tripped as strings and made `check()` throw. Dates are now revived;
 > `toMillis` accepts `Date`, ISO strings, and numbers.
 
@@ -289,7 +289,7 @@ need to exhaust other paths once one succeeds.
 |--------|--------|------------|
 | Group/hierarchy depth | More recursive hops per check | Keep nesting shallow (2-3); memo absorbs *repeated* nodes, not longer chains |
 | Number of group/hierarchy relations | Each is traversed | Only declare the relations you use |
-| Shared subgraphs (diamonds) | Resolved once thanks to memo | Free in 0.2.0 |
+| Shared subgraphs (diamonds) | Resolved once thanks to memo | Free in 0.3.0 |
 | Cycles | Terminate via `visited`; cost bounded by `defaultCheckDepth` | Avoid circular groups anyway |
 | Tuple count | Larger index scans per `findTuples` | Ensure DB indexes on `(subject..., relation)` and `(object..., relation)` |
 

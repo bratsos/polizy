@@ -196,19 +196,19 @@ alice → member → frontendTeam → member → engineeringDept → viewer → 
 
 ### Important: Depth Limits
 
-Polizy has a default depth limit of **20** (was 10 in 0.1.x) to prevent runaway traversal. If your group nesting is deeper, increase it:
+Polizy has a default depth limit of **20** (was 10 in 0.2.x and earlier) to prevent runaway traversal. If your group nesting is deeper, increase it:
 
 ```typescript
 const authz = new AuthSystem({
   storage,
   schema,
   defaultCheckDepth: 30,        // raise if your graphs are deeper
-  maxDepthBehavior: "throw",    // 0.2.0 default: throws MaxDepthExceededError past the limit
+  maxDepthBehavior: "throw",    // 0.3.0 default: throws MaxDepthExceededError past the limit
   // maxDepthBehavior: "deny",  // old behavior: silently return false
 });
 ```
 
-> **0.2.0:** exceeding `defaultCheckDepth` now throws `MaxDepthExceededError`
+> **0.3.0:** exceeding `defaultCheckDepth` now throws `MaxDepthExceededError`
 > instead of silently returning `false`. Set `maxDepthBehavior: "deny"` to keep
 > the old silent-deny behavior. Per-check memoization means wide/deep group and
 > folder graphs resolve in roughly linear time and cycles terminate safely.
@@ -247,7 +247,7 @@ await authz.check({ who: alice, canThey: "edit", onWhat: project1 }); // true
 await authz.check({ who: bob, canThey: "edit", onWhat: project1 });   // true
 ```
 
-### Multiple Group Relations (0.2.0)
+### Multiple Group Relations (0.3.0)
 
 A schema can declare several `group` relations (e.g. `member` for teams and
 `orgMember` for organizations). `check()` traverses **all** of them. When more
@@ -369,7 +369,7 @@ await authz.allow({ who: alice, toBe: "viewer", onWhat: rootFolder });
 await authz.check({ who: alice, canThey: "view", onWhat: doc1 }); // true
 ```
 
-### Multiple Hierarchy Relations (0.2.0)
+### Multiple Hierarchy Relations (0.3.0)
 
 You can declare several `hierarchy` relations to model independent containment
 axes — e.g. a document's `folderParent` and its `orgParent`. `check()` follows
@@ -497,7 +497,7 @@ alice → member → engineering → editor → projectFolder ← parent ← doc
 | Use case | Specific access | Team-based access | Folder/file structures |
 | Requires config | Just relation definition | Just relation definition | Also needs `hierarchyPropagation` |
 | Traversal direction | Direct lookup | User → Groups → Permissions | Resource → Parents → Permissions |
-| Multiple allowed (0.2.0) | n/a | Yes — disambiguate writes with `as` | Yes — disambiguate writes with `as` |
+| Multiple allowed (0.3.0) | n/a | Yes — disambiguate writes with `as` | Yes — disambiguate writes with `as` |
 
 > **Conditions apply to any relation.** Tuples written by `allow`/`addMember`/`setParent`
 > can carry a `when` condition (time window and/or attribute predicates) evaluated

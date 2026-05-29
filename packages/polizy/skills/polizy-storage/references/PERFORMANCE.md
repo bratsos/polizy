@@ -2,7 +2,7 @@
 
 Strategies for high-performance authorization at scale.
 
-## What 0.2.0 already does for you
+## What 0.3.0 already does for you
 
 Two former cliffs are fixed in the engine — you do not need to work around them:
 
@@ -12,8 +12,8 @@ Two former cliffs are fixed in the engine — you do not need to work around the
   time instead of re-traversing exponentially, and **cycles terminate safely**
   (a membership loop no longer hangs or blows the stack). You can model real org
   graphs without hand-pruning them for performance.
-- **`listAccessibleObjects` no longer full-scans the tuple table.** In 0.1.x it
-  effectively did `findTuples({})` and filtered in memory. In 0.2.0 its cost
+- **`listAccessibleObjects` no longer full-scans the tuple table.** In 0.2.x and earlier it
+  effectively did `findTuples({})` and filtered in memory. In 0.3.0 its cost
   scales with the **subject's reachable set** (the groups/folders they can
   traverse), not the total number of tuples in the system. Reverse expansion
   (`listSubjects`) is similarly bounded.
@@ -122,7 +122,7 @@ AND relation = 'member';
 
 ### Problem
 
-Each *distinct* group/parent in the reachable set costs a storage lookup. 0.2.0
+Each *distinct* group/parent in the reachable set costs a storage lookup. 0.3.0
 memoization means a shared group is only visited **once per check** (no
 exponential re-traversal of diamonds, and cycles terminate), so the cost is
 proportional to the number of *unique* nodes reachable, not the number of paths:

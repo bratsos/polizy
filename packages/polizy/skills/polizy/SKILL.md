@@ -4,7 +4,7 @@ description: Router for the polizy authorization library. Use when the user ment
 license: MIT
 metadata:
   author: bratsos
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -33,7 +33,7 @@ project to the latest polizy version", "I just bumped polizy, walk me through th
 migration", "get me from 0.1 to the newest version"), route to
 [`migrations/README.md`](./migrations/README.md) — the upgrade router. It detects
 the installed and previous versions, finds the relevant migration guides, and
-applies them **in order, step by step** (e.g. `0.1→0.2→0.3→…`) up to the newest
+applies them **in order, step by step** (e.g. `0.2→0.3→0.4→…`) up to the newest
 version available. Each published release bundles the full `migrations/` history,
 so multi-version jumps work.
 
@@ -48,7 +48,7 @@ so multi-version jumps work.
 | **Action** | Intent: `view`, `edit`, `delete` — mapped to relations |
 | **Condition** | Optional time window (`validSince`/`validUntil`) and/or attribute predicates (ABAC) |
 
-## Capabilities (0.2.0)
+## Capabilities (0.3.0)
 
 - **Checks:** `check`, `checkMany` (batch), `checkOrThrow`, `explain` (why
   allowed/denied), `listAccessibleObjects` (paginated), `listSubjects` (reverse —

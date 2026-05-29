@@ -266,19 +266,21 @@ Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `find
 * **Conditions** cover time windows and attribute predicates — not a full policy language.
 * **No consistency tokens.** As an in-process library reading your own store, `polizy` doesn't implement Zanzibar "zookies"/new-enemy protection; reads reflect committed tuples.
 
-## Migrating from 0.1.x → 0.2.0
+## Migrating from 0.2.x → 0.3.0
 
-0.2.0 fixes correctness bugs (especially in the Prisma adapter) and adds APIs. Breaking changes:
+0.3.0 fixes correctness bugs (especially in the Prisma adapter) and adds APIs. Breaking changes:
 
-* **Prisma import.** Use `import { PrismaStorageAdapter } from "polizy/prisma-storage"` (factory) — the previous README's `new PrismaStorageAdapter(...)` from `"polizy"` never existed. Add the `@@unique` constraint shown above; without it, idempotent upserts can't work.
+* **Prisma import moved.** The adapter is now exported **only** from `polizy/prisma-storage` (it was also on the main `polizy` entry in 0.2.x). Use `import { PrismaStorageAdapter } from "polizy/prisma-storage"` — still a factory (no `new`). Add the `@@unique` constraint shown above; without it, idempotent upserts can't work.
+* **`throwOnMaxDepth` → `maxDepthBehavior`.** Replace the `throwOnMaxDepth` boolean with `maxDepthBehavior: "throw" | "deny"` (default `"throw"` — `check` throws `MaxDepthExceededError` past `defaultCheckDepth`, which also rose from 10 to 20). Use `"deny"` for the old silent-`false` behavior.
 * **Field ids are opt-in.** Declare `fieldLevelObjects` for types that use `#`; previously *any* id containing `#` inherited from its prefix (a privilege-bleed risk). This is now off by default.
-* **Depth exceeded throws.** `check` now throws `MaxDepthExceededError` past `defaultCheckDepth` (was a silent `false`). Set `maxDepthBehavior: "deny"` for the old behavior.
 * **`defineSchema` throws** on dangling relation/action references (was a `console.warn`).
 * **Multiple group/hierarchy relations** require `as` on `addMember`/`setParent`/`removeMember`/`removeParent` (inferred when there's exactly one).
 * **No `console` output.** Provide a `logger` if you want warnings.
-* Time-based conditions now round-trip correctly through the Prisma adapter (previously they threw).
+* Time-based conditions now round-trip correctly through the Prisma adapter (previously they threw), and revocation no longer over-deletes.
 
 New: `checkMany`, `checkOrThrow`, `explain`, `listSubjects`, `allowMany`, wildcard `everyone()`, attribute-predicate conditions, paginated `listTuples`/`listAccessibleObjects`.
+
+A bundled, version-aware upgrade router and per-step migration guides ship with the package under `skills/polizy/migrations/` (see `migrate-0.2-to-0.3.md`).
 
 ## Examples
 

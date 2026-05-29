@@ -14,8 +14,8 @@ This skill activates when a user says things like:
 
 The router's job is to figure out **which migration guides to apply, in order**,
 given the version delta — and to apply them **step by step** even across several
-releases (e.g. `0.1.0 → 0.4.0` applies `0.1→0.2`, then `0.2→0.3`, then
-`0.3→0.4`). The user should already have run their package manager's upgrade
+releases (e.g. `0.2.0 → 0.5.0` applies `0.2→0.3`, then `0.3→0.4`, then
+`0.4→0.5`). The user should already have run their package manager's upgrade
 command before invoking this; if not, run it for them (see "Package manager
 reference" below).
 
@@ -131,8 +131,10 @@ git diff HEAD -- pnpm-lock.yaml package-lock.json yarn.lock bun.lock package.jso
 ### Strategy 4 — Ask
 
 "Before the upgrade, what version of `polizy` were you on?" Quote the installed
-version (Step 1) to anchor the question. If the previous version is older than
-`0.1.0`, there are no migration guides before `0.1→0.2`; review the README/changelog.
+version (Step 1) to anchor the question. The first shipped migration guide is
+`migrate-0.2-to-0.3.md`; if the previous version is `0.2.x` or earlier there is
+nothing before it (the `0.1.x`→`0.2.0` step had no breaking API changes) — review
+the README/changelog for anything specific.
 
 ## Step 3 — List available migrations
 
@@ -154,11 +156,10 @@ ls node_modules/polizy/skills/polizy/migrations/ 2>/dev/null
 
 Given previous = `P` and installed = `I`, select every `migrate-X.Y-to-A.B.md`
 whose **source** `X.Y >= P` and **target** `A.B <= I`, sorted ascending by source
-version, and apply them in that order. Example for `0.1.0 → 0.4.0`:
+version, and apply them in that order. Example for `0.2.0 → 0.4.0`:
 
-1. `migrate-0.1-to-0.2.md`
-2. `migrate-0.2-to-0.3.md`
-3. `migrate-0.3-to-0.4.md`
+1. `migrate-0.2-to-0.3.md`
+2. `migrate-0.3-to-0.4.md`
 
 **Patch releases** (e.g. `0.2.1 → 0.2.3`) have no guide — they ship no breaking
 changes. If the user reports breaking behavior on a patch bump, check the
@@ -171,7 +172,7 @@ For each guide, oldest first:
 1. Read the full migration doc.
 2. Do every item under **Required actions** — these are non-optional (breaking
    API/default changes, schema migrations).
-3. If it includes a **Prisma schema migration** (0.1→0.2 adds the `@@unique`),
+3. If it includes a **Prisma schema migration** (0.2→0.3 adds the `@@unique`),
    apply it once in the DB-owning workspace — confirm before running
    `prisma migrate dev` / `prisma db push`, and dedupe rows first if needed.
 4. Apply code changes — usually grep + edit. Use the repo root in a monorepo:

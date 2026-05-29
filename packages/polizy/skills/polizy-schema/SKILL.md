@@ -4,7 +4,7 @@ description: Schema design guide for polizy authorization. Use when defining rel
 license: MIT
 metadata:
   author: bratsos
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -72,7 +72,7 @@ const schema = defineSchema({
 });
 ```
 
-> **0.2.0 — `defineSchema` throws.** If an action maps to an undefined relation,
+> **0.3.0 — `defineSchema` throws.** If an action maps to an undefined relation,
 > or `hierarchyPropagation` references an undefined action, `defineSchema` throws
 > a `SchemaError` at definition time (it no longer `console.warn`s and continues).
 > This catches dangling references the moment your app boots.
@@ -196,7 +196,7 @@ Need child resources to inherit parent permissions?
   → Configure hierarchyPropagation
 ```
 
-## Multiple Group / Hierarchy Relations (0.2.0)
+## Multiple Group / Hierarchy Relations (0.3.0)
 
 A schema can now declare **more than one** `group` relation and/or **more than
 one** `hierarchy` relation. `check()` traverses all of them. This lets you model
@@ -247,14 +247,14 @@ await authz.removeMember({ member: user, group: team, as: "member" });
 that isn't of the right kind (or doesn't exist) is a compile-time error and, at
 runtime, a `SchemaError`.
 
-## Field-Level Objects (0.2.0)
+## Field-Level Objects (0.3.0)
 
 Field-level identifiers let an object id carry a field after the separator
 (default `#`): `document:doc1#summary`. A grant on the **base** object (`doc1`)
 authorizes its fields (`doc1#summary`) — via direct, group, **and** hierarchy
 paths — while a grant on a specific field stays scoped to that field.
 
-In 0.2.0 this is **opt-in**: only types listed in `fieldLevelObjects` split on
+In 0.3.0 this is **opt-in**: only types listed in `fieldLevelObjects` split on
 the separator. Types not listed never split, so ids that naturally contain `#`
 can't accidentally leak access (the secure default).
 

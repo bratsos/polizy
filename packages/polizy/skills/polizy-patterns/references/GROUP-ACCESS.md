@@ -300,7 +300,7 @@ await authz.allow({
 
 ## Multiple Group Relations
 
-0.2.0 supports more than one group relation (e.g. `member` for teams and
+0.3.0 supports more than one group relation (e.g. `member` for teams and
 `orgMember` for organizations). When a schema declares more than one, the member
 APIs can't guess which to use, so pass `as`:
 
@@ -345,7 +345,7 @@ Polizy limits group traversal depth to prevent infinite loops (default: **20**).
 const authz = new AuthSystem({
   storage,
   schema,
-  defaultCheckDepth: 20,  // Default in 0.2.0
+  defaultCheckDepth: 20,  // Default in 0.3.0
 });
 ```
 

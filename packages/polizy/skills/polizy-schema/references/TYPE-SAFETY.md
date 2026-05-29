@@ -30,7 +30,7 @@ const schema = defineSchema({
 `defineSchema` uses `const` generics, so relation/action names are captured as
 literal unions: `TypedRelation<S>` and `TypedAction<S>` reject typos at every
 call site (`allow`, `check`, `addMember`'s `as`, etc.). Beyond compile-time
-checking, `defineSchema` also **throws a `SchemaError` at runtime** (0.2.0) if an
+checking, `defineSchema` also **throws a `SchemaError` at runtime** (0.3.0) if an
 action maps to an undefined relation or `hierarchyPropagation` references an
 undefined action — so bad models fail fast at startup.
 
@@ -274,7 +274,7 @@ type StoredTuple = {
   condition?: {
     validSince?: Date;
     validUntil?: Date;
-    // 0.2.0: attribute predicates (ABAC), all ANDed together
+    // 0.3.0: attribute predicates (ABAC), all ANDed together
     attributes?: Array<{
       attribute: string; // dot-path into the check context
       operator: "eq" | "ne" | "in" | "nin" | "gt" | "gte" | "lt" | "lte";

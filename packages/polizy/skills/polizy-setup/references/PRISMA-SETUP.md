@@ -14,7 +14,7 @@ npm install -D prisma
 ## Prisma Model
 
 Add this model to your `prisma/schema.prisma`. The compound `@@unique`
-constraint is **required** in 0.2.0 — the adapter upserts on this key to make
+constraint is **required** in 0.3.0 — the adapter upserts on this key to make
 grants idempotent. Without it, `allow`/`addMember`/`setParent` cannot dedupe and
 the upsert has no key to target.
 
@@ -63,9 +63,9 @@ In production/CI, apply committed migrations with:
 npx prisma migrate deploy
 ```
 
-### Upgrading from 0.1.x: dedupe before migrating
+### Upgrading from 0.2.x and earlier: dedupe before migrating
 
-0.1.x allowed duplicate tuples. If your existing table has duplicates, adding the
+0.2.x and earlier allowed duplicate tuples. If your existing table has duplicates, adding the
 `@@unique` constraint will fail until you remove them. Delete duplicates first
 (Postgres example), then run the migration:
 
@@ -155,7 +155,7 @@ It is a factory, not a class. Use `PrismaStorageAdapter(prisma)`, not
 
 ### Unique constraint migration fails
 
-You have duplicate tuples from 0.1.x. Dedupe them (see "Upgrading from 0.1.x"
+You have duplicate tuples from 0.2.x and earlier. Dedupe them (see "Upgrading from 0.2.x and earlier"
 above), then re-run the migration.
 
 ### "Table 'PolizyTuple' doesn't exist"
@@ -177,8 +177,8 @@ npx prisma generate
 
 ### Time-based or attribute conditions behave oddly
 
-In 0.1.x, `validSince`/`validUntil` round-tripped through the JSON column as
-strings and could make `check()` throw. 0.2.0 revives them to `Date`, so
+In 0.2.x and earlier, `validSince`/`validUntil` round-tripped through the JSON column as
+strings and could make `check()` throw. 0.3.0 revives them to `Date`, so
 conditions work on Prisma. If you avoided conditions on Prisma before, they are
 safe to use now.
 

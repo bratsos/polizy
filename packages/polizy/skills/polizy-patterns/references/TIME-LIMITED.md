@@ -31,7 +31,7 @@ During `check()`, polizy evaluates:
 - If `validUntil` is set and current time is after it → permission expired
 - Both must be satisfied for permission to be valid
 
-> **0.2.0: `allow()` is idempotent on `(subject, relation, object)`.** Re-granting
+> **0.3.0: `allow()` is idempotent on `(subject, relation, object)`.** Re-granting
 > the same triple **overwrites** the existing condition instead of adding a row.
 > So a *standing* grant and a *temporary* grant cannot coexist on the same triple
 > if they differ only by condition — model them as **distinct relations**

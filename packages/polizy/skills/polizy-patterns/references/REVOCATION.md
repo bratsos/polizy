@@ -2,7 +2,7 @@
 
 Remove permissions from users, groups, and resources.
 
-> **0.2.0: revocation is precise.** `removeParent`, `removeMember`, and
+> **0.3.0: revocation is precise.** `removeParent`, `removeMember`, and
 > single-tuple `disallowAllMatching({ who, was, onWhat })` delete exactly the
 > matching tuple(s) — they no longer over-delete unrelated tuples (e.g. a
 > parent's own parent link). Both the in-memory and Prisma adapters behave

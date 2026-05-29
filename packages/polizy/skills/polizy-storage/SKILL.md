@@ -4,7 +4,7 @@ description: Storage adapter setup for polizy authorization. Use when configurin
 license: MIT
 metadata:
   author: bratsos
-  version: "0.2.0"
+  version: "0.3.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -235,9 +235,9 @@ subject's reachable set rather than scanning the whole tuple table. See
 | "Table doesn't exist" | Run `npx prisma migrate deploy` |
 | `new PrismaStorageAdapter(...)` fails | It's a factory from `polizy/prisma-storage` — call it, don't `new` it |
 | Upsert/idempotent write errors | Add `@@unique([subjectType, subjectId, relation, objectType, objectId])` and migrate |
-| Migration fails on the new `@@unique` | Dedupe 0.1.x duplicate rows first (see migration guide) |
-| Time-based grants threw on Prisma | Fixed in 0.2.0 — conditions revive `validSince`/`validUntil` to `Date` on read |
-| Revocation removed too much | Fixed in 0.2.0 — both adapters keep an explicit `who` and no longer over-delete |
+| Migration fails on the new `@@unique` | Dedupe 0.2.x and earlier duplicate rows first (see migration guide) |
+| Time-based grants threw on Prisma | Fixed in 0.3.0 — conditions revive `validSince`/`validUntil` to `Date` on read |
+| Revocation removed too much | Fixed in 0.3.0 — both adapters keep an explicit `who` and no longer over-delete |
 | Slow checks | Reduce group/hierarchy depth; index the two hot paths |
 | Memory growing | Clean up expired conditional tuples |
 

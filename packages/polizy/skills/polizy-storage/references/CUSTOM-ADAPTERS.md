@@ -97,7 +97,7 @@ Delete every tuple matching, with all present clauses AND-ed:
   resource be revoked as both object and subject of links. But because it is
   AND-ed under `who`, an explicit `who` is **never dropped** — when `who` is
   present, the only rows the subject-arm can add are ones where `who == onWhat`.
-  Do not OR the subject match out at the top level; that over-deletes (the 0.1.x
+  Do not OR the subject match out at the top level; that over-deletes (the 0.2.x and earlier
   Prisma bug, e.g. `removeParent` wiping a parent's own parent link).
 - An empty filter (no `who`, `was`, or `onWhat`) must delete **nothing** and
   return `0` — guard against accidental table wipes.
@@ -140,7 +140,7 @@ interface AnyObject<O> {
   id: string;    // May include field separator, e.g., "doc1#salary"
 }
 
-// Condition type — note `attributes` (ABAC) added in 0.2.0
+// Condition type — note `attributes` (ABAC) added in 0.3.0
 interface Condition {
   validSince?: Date;                 // time window start
   validUntil?: Date;                 // time window end
@@ -158,7 +158,7 @@ interface AttributePredicate {
 > `condition` to JSON (most stores do), `validSince`/`validUntil` come back as
 > strings. You MUST convert them back to `Date` when reading — the engine's
 > condition logic expects `Date`, and passing strings makes time-based grants
-> throw (this was the 0.1.x Prisma bug). Preserve `attributes` verbatim.
+> throw (this was the 0.2.x and earlier Prisma bug). Preserve `attributes` verbatim.
 
 ## Minimal Implementation
 

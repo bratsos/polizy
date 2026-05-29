@@ -326,7 +326,7 @@ async function shareFolder(folderId: string, userId: string, role: string) {
 
 ## Multiple Hierarchy Relations
 
-0.2.0 supports more than one hierarchy relation. When a schema declares more than
+0.3.0 supports more than one hierarchy relation. When a schema declares more than
 one, pass `as` to disambiguate `setParent`/`removeParent`:
 
 ```typescript
@@ -353,7 +353,7 @@ await authz.removeParent({
 });
 ```
 
-`removeParent` is precise in 0.2.0 — it deletes exactly that child→parent link
+`removeParent` is precise in 0.3.0 — it deletes exactly that child→parent link
 and nothing else (e.g. it won't drop the parent's own parent link).
 
 ## Field Access Through Hierarchy
