@@ -71,7 +71,11 @@ describe("read APIs", () => {
         authz.checkOrThrow({ who: u("b"), canThey: "edit", onWhat: doc("d1") }),
       );
       await assert.rejects(
-        authz.checkOrThrow({ who: u("b"), canThey: "delete", onWhat: doc("d2") }),
+        authz.checkOrThrow({
+          who: u("b"),
+          canThey: "delete",
+          onWhat: doc("d2"),
+        }),
         NotAuthorizedError,
       );
     });
@@ -80,32 +84,60 @@ describe("read APIs", () => {
   describe("explain", () => {
     it("explains a direct grant", async () => {
       await authz.allow({ who: u("c"), toBe: "owner", onWhat: doc("d1") });
-      const r = await authz.explain({ who: u("c"), canThey: "edit", onWhat: doc("d1") });
+      const r = await authz.explain({
+        who: u("c"),
+        canThey: "edit",
+        onWhat: doc("d1"),
+      });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "direct");
     });
     it("explains a denial with via null", async () => {
-      const r = await authz.explain({ who: u("c"), canThey: "edit", onWhat: doc("none") });
+      const r = await authz.explain({
+        who: u("c"),
+        canThey: "edit",
+        onWhat: doc("none"),
+      });
       assert.equal(r.allowed, false);
       assert.equal(r.via, null);
     });
     it("explains a group grant", async () => {
-      await authz.allow({ who: team("t") as any, toBe: "viewer", onWhat: doc("d1") });
+      await authz.allow({
+        who: team("t") as any,
+        toBe: "viewer",
+        onWhat: doc("d1"),
+      });
       await authz.addMember({ member: u("c"), group: team("t") });
-      const r = await authz.explain({ who: u("c"), canThey: "view", onWhat: doc("d1") });
+      const r = await authz.explain({
+        who: u("c"),
+        canThey: "view",
+        onWhat: doc("d1"),
+      });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "group");
     });
     it("explains a hierarchy grant", async () => {
       await authz.allow({ who: u("c"), toBe: "viewer", onWhat: folder("f") });
       await authz.setParent({ child: doc("d1"), parent: folder("f") });
-      const r = await authz.explain({ who: u("c"), canThey: "view", onWhat: doc("d1") });
+      const r = await authz.explain({
+        who: u("c"),
+        canThey: "view",
+        onWhat: doc("d1"),
+      });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "hierarchy");
     });
     it("explains a wildcard grant", async () => {
-      await authz.allow({ who: everyone("user"), toBe: "viewer", onWhat: doc("d1") });
-      const r = await authz.explain({ who: u("z"), canThey: "view", onWhat: doc("d1") });
+      await authz.allow({
+        who: everyone("user"),
+        toBe: "viewer",
+        onWhat: doc("d1"),
+      });
+      const r = await authz.explain({
+        who: u("z"),
+        canThey: "view",
+        onWhat: doc("d1"),
+      });
       assert.equal(r.allowed, true);
       assert.equal(r.via?.kind, "wildcard");
     });
@@ -113,10 +145,21 @@ describe("read APIs", () => {
 
   describe("listSubjects (reverse expand)", () => {
     it("returns direct holders, group members, and hierarchy descendants' grantees", async () => {
-      await authz.allow({ who: u("direct"), toBe: "viewer", onWhat: doc("d1") });
-      await authz.allow({ who: team("t") as any, toBe: "viewer", onWhat: doc("d1") });
+      await authz.allow({
+        who: u("direct"),
+        toBe: "viewer",
+        onWhat: doc("d1"),
+      });
+      await authz.allow({
+        who: team("t") as any,
+        toBe: "viewer",
+        onWhat: doc("d1"),
+      });
       await authz.addMember({ member: u("viaGroup"), group: team("t") });
-      const subjects = await authz.listSubjects({ canThey: "view", onWhat: doc("d1") });
+      const subjects = await authz.listSubjects({
+        canThey: "view",
+        onWhat: doc("d1"),
+      });
       const ids = subjects.map((s) => s.id).sort();
       assert.ok(ids.includes("direct"), "direct holder missing");
       assert.ok(ids.includes("viaGroup"), "group member missing");
@@ -124,8 +167,16 @@ describe("read APIs", () => {
     it("honors the ofType filter and dedupes", async () => {
       await authz.allow({ who: u("x"), toBe: "owner", onWhat: doc("d1") });
       await authz.allow({ who: u("x"), toBe: "viewer", onWhat: doc("d1") });
-      const subjects = await authz.listSubjects({ canThey: "view", onWhat: doc("d1"), ofType: "user" });
-      assert.equal(subjects.filter((s) => s.id === "x").length, 1, "should dedupe");
+      const subjects = await authz.listSubjects({
+        canThey: "view",
+        onWhat: doc("d1"),
+        ofType: "user",
+      });
+      assert.equal(
+        subjects.filter((s) => s.id === "x").length,
+        1,
+        "should dedupe",
+      );
     });
   });
 
@@ -136,27 +187,48 @@ describe("read APIs", () => {
       await a.allow({ who: u("o"), toBe: "owner", onWhat: doc("d1") });
       await a.allow({ who: u("o"), toBe: "viewer", onWhat: doc("d2") });
       scan.emptyFilterCalls = 0;
-      const { accessible } = await a.listAccessibleObjects({ who: u("o"), ofType: "document" });
+      const { accessible } = await a.listAccessibleObjects({
+        who: u("o"),
+        ofType: "document",
+      });
       const ids = accessible.map((x) => x.object.id).sort();
       assert.deepEqual(ids, ["d1", "d2"]);
       const d1 = accessible.find((x) => x.object.id === "d1");
       assert.ok(d1?.actions.includes("edit") && d1?.actions.includes("view"));
-      assert.equal(scan.emptyFilterCalls, 0, "must not perform an empty-filter full-table scan");
+      assert.equal(
+        scan.emptyFilterCalls,
+        0,
+        "must not perform an empty-filter full-table scan",
+      );
     });
     it("filters by canThey when provided", async () => {
       await authz.allow({ who: u("o"), toBe: "viewer", onWhat: doc("d1") });
       await authz.allow({ who: u("o"), toBe: "owner", onWhat: doc("d2") });
-      const { accessible } = await authz.listAccessibleObjects({ who: u("o"), ofType: "document", canThey: "edit" });
-      assert.deepEqual(accessible.map((x) => x.object.id), ["d2"]);
+      const { accessible } = await authz.listAccessibleObjects({
+        who: u("o"),
+        ofType: "document",
+        canThey: "edit",
+      });
+      assert.deepEqual(
+        accessible.map((x) => x.object.id),
+        ["d2"],
+      );
     });
   });
 
   describe("listTuples pagination", () => {
     it("applies limit and offset", async () => {
       for (let i = 0; i < 5; i++) {
-        await authz.allow({ who: u(`u${i}`), toBe: "viewer", onWhat: doc("shared") });
+        await authz.allow({
+          who: u(`u${i}`),
+          toBe: "viewer",
+          onWhat: doc("shared"),
+        });
       }
-      const page = await authz.listTuples({ object: doc("shared") }, { limit: 2, offset: 1 });
+      const page = await authz.listTuples(
+        { object: doc("shared") },
+        { limit: 2, offset: 1 },
+      );
       assert.equal(page.length, 2);
     });
   });

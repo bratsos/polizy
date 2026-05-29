@@ -50,22 +50,44 @@ describe("write APIs", () => {
         { who: u("b"), toBe: "viewer", onWhat: doc("d2") },
       ]);
       assert.equal(written.length, 2);
-      assert.equal(await authz.check({ who: u("a"), canThey: "edit", onWhat: doc("d1") }), true);
-      assert.equal(await authz.check({ who: u("b"), canThey: "view", onWhat: doc("d2") }), true);
+      assert.equal(
+        await authz.check({ who: u("a"), canThey: "edit", onWhat: doc("d1") }),
+        true,
+      );
+      assert.equal(
+        await authz.check({ who: u("b"), canThey: "view", onWhat: doc("d2") }),
+        true,
+      );
     });
   });
 
   describe("removeMember", () => {
     it("removes a user member", async () => {
-      await authz.allow({ who: team("t") as any, toBe: "viewer", onWhat: doc("d1") });
+      await authz.allow({
+        who: team("t") as any,
+        toBe: "viewer",
+        onWhat: doc("d1"),
+      });
       await authz.addMember({ member: u("a"), group: team("t") });
-      assert.equal(await authz.check({ who: u("a"), canThey: "view", onWhat: doc("d1") }), true);
+      assert.equal(
+        await authz.check({ who: u("a"), canThey: "view", onWhat: doc("d1") }),
+        true,
+      );
       await authz.removeMember({ member: u("a"), group: team("t") });
-      assert.equal(await authz.check({ who: u("a"), canThey: "view", onWhat: doc("d1") }), false);
+      assert.equal(
+        await authz.check({ who: u("a"), canThey: "view", onWhat: doc("d1") }),
+        false,
+      );
     });
     it("accepts an object (e.g. nested group) as the member", async () => {
-      await authz.addMember({ member: team("child") as any, group: team("parentTeam") });
-      const removed = await authz.removeMember({ member: team("child") as any, group: team("parentTeam") });
+      await authz.addMember({
+        member: team("child") as any,
+        group: team("parentTeam"),
+      });
+      const removed = await authz.removeMember({
+        member: team("child") as any,
+        group: team("parentTeam"),
+      });
       assert.equal(removed, 1);
     });
   });
@@ -73,9 +95,15 @@ describe("write APIs", () => {
   describe("removeParent does not over-remove (in-memory parity already, regression guard)", () => {
     it("removes only the targeted child->parent link", async () => {
       await authz.setParent({ child: doc("d1"), parent: folder("f1") });
-      await authz.setParent({ child: folder("f1") as any, parent: folder("root") });
+      await authz.setParent({
+        child: folder("f1") as any,
+        parent: folder("root"),
+      });
       await authz.removeParent({ child: doc("d1"), parent: folder("f1") });
-      const f1Parent = await authz.listTuples({ subject: folder("f1") as any, relation: "parent" });
+      const f1Parent = await authz.listTuples({
+        subject: folder("f1") as any,
+        relation: "parent",
+      });
       assert.equal(f1Parent.length, 1, "f1->root must survive");
     });
   });

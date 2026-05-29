@@ -48,11 +48,15 @@ describe("schema helpers", () => {
   describe("resolveRelation", () => {
     const fail = (m: string) => new SchemaError(m);
     it("infers when exactly one relation of the kind exists", () => {
-      assert.equal(resolveRelation(["member"], undefined, "group", fail), "member");
+      assert.equal(
+        resolveRelation(["member"], undefined, "group", fail),
+        "member",
+      );
     });
     it("requires 'as' when multiple exist", () => {
       assert.throws(
-        () => resolveRelation(["member", "orgMember"], undefined, "group", fail),
+        () =>
+          resolveRelation(["member", "orgMember"], undefined, "group", fail),
         SchemaError,
       );
       assert.equal(
@@ -67,7 +71,10 @@ describe("schema helpers", () => {
       );
     });
     it("throws when no relation of the kind exists", () => {
-      assert.throws(() => resolveRelation([], undefined, "hierarchy", fail), SchemaError);
+      assert.throws(
+        () => resolveRelation([], undefined, "hierarchy", fail),
+        SchemaError,
+      );
     });
   });
 });

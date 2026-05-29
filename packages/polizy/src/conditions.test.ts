@@ -23,10 +23,16 @@ describe("isConditionValid", () => {
       assert.equal(isConditionValid({ validUntil: new Date(1_000_001) }), true);
     });
     it("validUntil exactly now => false (exclusive upper bound)", () => {
-      assert.equal(isConditionValid({ validUntil: new Date(1_000_000) }), false);
+      assert.equal(
+        isConditionValid({ validUntil: new Date(1_000_000) }),
+        false,
+      );
     });
     it("validSince in the future => false; exactly now => true (inclusive lower)", () => {
-      assert.equal(isConditionValid({ validSince: new Date(1_000_001) }), false);
+      assert.equal(
+        isConditionValid({ validSince: new Date(1_000_001) }),
+        false,
+      );
       assert.equal(isConditionValid({ validSince: new Date(1_000_000) }), true);
     });
     it("coerces ISO-string dates (Prisma JSON round-trip shape)", () => {
@@ -56,24 +62,57 @@ describe("isConditionValid", () => {
   });
 
   describe("attribute predicates", () => {
-    const cond = (attribute: string, operator: string, value: unknown): Condition =>
-      ({ attributes: [{ attribute, operator, value }] } as unknown as Condition);
+    const cond = (
+      attribute: string,
+      operator: string,
+      value: unknown,
+    ): Condition =>
+      ({
+        attributes: [{ attribute, operator, value }],
+      }) as unknown as Condition;
 
     it("eq: match => true, mismatch => false, missing key => false", () => {
-      assert.equal(isConditionValid(cond("dept", "eq", "eng"), { dept: "eng" }), true);
-      assert.equal(isConditionValid(cond("dept", "eq", "eng"), { dept: "sales" }), false);
+      assert.equal(
+        isConditionValid(cond("dept", "eq", "eng"), { dept: "eng" }),
+        true,
+      );
+      assert.equal(
+        isConditionValid(cond("dept", "eq", "eng"), { dept: "sales" }),
+        false,
+      );
       assert.equal(isConditionValid(cond("dept", "eq", "eng"), {}), false);
-      assert.equal(isConditionValid(cond("dept", "eq", "eng"), undefined), false);
+      assert.equal(
+        isConditionValid(cond("dept", "eq", "eng"), undefined),
+        false,
+      );
     });
     it("ne", () => {
-      assert.equal(isConditionValid(cond("tier", "ne", "free"), { tier: "pro" }), true);
-      assert.equal(isConditionValid(cond("tier", "ne", "free"), { tier: "free" }), false);
+      assert.equal(
+        isConditionValid(cond("tier", "ne", "free"), { tier: "pro" }),
+        true,
+      );
+      assert.equal(
+        isConditionValid(cond("tier", "ne", "free"), { tier: "free" }),
+        false,
+      );
     });
     it("in / nin", () => {
-      assert.equal(isConditionValid(cond("role", "in", ["a", "b"]), { role: "b" }), true);
-      assert.equal(isConditionValid(cond("role", "in", ["a", "b"]), { role: "c" }), false);
-      assert.equal(isConditionValid(cond("role", "nin", ["a", "b"]), { role: "c" }), true);
-      assert.equal(isConditionValid(cond("role", "nin", ["a", "b"]), { role: "a" }), false);
+      assert.equal(
+        isConditionValid(cond("role", "in", ["a", "b"]), { role: "b" }),
+        true,
+      );
+      assert.equal(
+        isConditionValid(cond("role", "in", ["a", "b"]), { role: "c" }),
+        false,
+      );
+      assert.equal(
+        isConditionValid(cond("role", "nin", ["a", "b"]), { role: "c" }),
+        true,
+      );
+      assert.equal(
+        isConditionValid(cond("role", "nin", ["a", "b"]), { role: "a" }),
+        false,
+      );
     });
     it("gt/gte/lt/lte numeric, with type-mismatch failing closed", () => {
       assert.equal(isConditionValid(cond("age", "gt", 18), { age: 21 }), true);
@@ -81,11 +120,16 @@ describe("isConditionValid", () => {
       assert.equal(isConditionValid(cond("age", "gte", 18), { age: 18 }), true);
       assert.equal(isConditionValid(cond("age", "lt", 18), { age: 17 }), true);
       assert.equal(isConditionValid(cond("age", "lte", 18), { age: 18 }), true);
-      assert.equal(isConditionValid(cond("age", "gt", 18), { age: "21" }), false);
+      assert.equal(
+        isConditionValid(cond("age", "gt", 18), { age: "21" }),
+        false,
+      );
     });
     it("resolves nested dot-paths", () => {
       assert.equal(
-        isConditionValid(cond("user.dept", "eq", "eng"), { user: { dept: "eng" } }),
+        isConditionValid(cond("user.dept", "eq", "eng"), {
+          user: { dept: "eng" },
+        }),
         true,
       );
       assert.equal(

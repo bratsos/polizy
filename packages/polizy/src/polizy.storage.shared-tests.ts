@@ -317,7 +317,10 @@ export function defineStorageAdapterTestSuite(
         object: { type: "document", id: "timed" },
       });
       assert.strictEqual(found.length, 1, "Should find the conditioned tuple");
-      assert.ok(found[0]?.condition, "Condition should be present after round-trip");
+      assert.ok(
+        found[0]?.condition,
+        "Condition should be present after round-trip",
+      );
       assert.ok(
         found[0].condition.validUntil instanceof Date,
         "validUntil should be a Date instance, not a string",
@@ -336,11 +339,22 @@ export function defineStorageAdapterTestSuite(
         object: { type: "document", id: "idoc" },
       };
       await adapter.write([tuple]);
-      await adapter.write([{ ...tuple, condition: { validUntil: new Date(Date.now() + 1000) } }]);
+      await adapter.write([
+        { ...tuple, condition: { validUntil: new Date(Date.now() + 1000) } },
+      ]);
 
-      const all = await adapter.findTuples({ subject: { type: "user", id: "ida" } });
-      assert.strictEqual(all.length, 1, "Re-writing the same tuple must not duplicate it");
-      assert.ok(all[0]?.condition?.validUntil, "Condition should reflect the latest write");
+      const all = await adapter.findTuples({
+        subject: { type: "user", id: "ida" },
+      });
+      assert.strictEqual(
+        all.length,
+        1,
+        "Re-writing the same tuple must not duplicate it",
+      );
+      assert.ok(
+        all[0]?.condition?.validUntil,
+        "Condition should reflect the latest write",
+      );
     });
 
     it("delete({ who, was, onWhat }) does not over-delete when onWhat is also a subject", async () => {
@@ -390,7 +404,11 @@ export function defineStorageAdapterTestSuite(
         { object: { type: "document", id: "paged" } },
         { limit: 2, offset: 2 },
       );
-      assert.strictEqual(page.length, 2, "Should return exactly the requested page size");
+      assert.strictEqual(
+        page.length,
+        2,
+        "Should return exactly the requested page size",
+      );
     });
   });
 }

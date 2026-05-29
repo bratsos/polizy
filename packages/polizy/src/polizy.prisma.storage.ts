@@ -22,7 +22,8 @@ function reviveCondition(raw: unknown): Condition | undefined {
   const out: Condition = {};
   if (c.validSince != null) out.validSince = new Date(c.validSince as string);
   if (c.validUntil != null) out.validUntil = new Date(c.validUntil as string);
-  if (Array.isArray(c.attributes)) out.attributes = c.attributes as Condition["attributes"];
+  if (Array.isArray(c.attributes))
+    out.attributes = c.attributes as Condition["attributes"];
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

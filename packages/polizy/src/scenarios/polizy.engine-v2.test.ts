@@ -60,23 +60,79 @@ describe("engine v2", () => {
 
   describe("multi-relation traversal", () => {
     it("traverses ALL group relations (member and orgMember)", async () => {
-      await authz.allow({ who: team("t1") as any, toBe: "viewer", onWhat: doc("dA") });
-      await authz.allow({ who: org("o1") as any, toBe: "viewer", onWhat: doc("dB") });
-      await authz.addMember({ member: u("alice"), group: team("t1"), as: "member" });
-      await authz.addMember({ member: u("alice"), group: org("o1"), as: "orgMember" });
+      await authz.allow({
+        who: team("t1") as any,
+        toBe: "viewer",
+        onWhat: doc("dA"),
+      });
+      await authz.allow({
+        who: org("o1") as any,
+        toBe: "viewer",
+        onWhat: doc("dB"),
+      });
+      await authz.addMember({
+        member: u("alice"),
+        group: team("t1"),
+        as: "member",
+      });
+      await authz.addMember({
+        member: u("alice"),
+        group: org("o1"),
+        as: "orgMember",
+      });
 
-      assert.equal(await authz.check({ who: u("alice"), canThey: "view", onWhat: doc("dA") }), true);
-      assert.equal(await authz.check({ who: u("alice"), canThey: "view", onWhat: doc("dB") }), true);
+      assert.equal(
+        await authz.check({
+          who: u("alice"),
+          canThey: "view",
+          onWhat: doc("dA"),
+        }),
+        true,
+      );
+      assert.equal(
+        await authz.check({
+          who: u("alice"),
+          canThey: "view",
+          onWhat: doc("dB"),
+        }),
+        true,
+      );
     });
 
     it("traverses ALL hierarchy relations (folderParent and orgParent)", async () => {
-      await authz.allow({ who: u("bob"), toBe: "viewer", onWhat: folder("f1") });
+      await authz.allow({
+        who: u("bob"),
+        toBe: "viewer",
+        onWhat: folder("f1"),
+      });
       await authz.allow({ who: u("bob"), toBe: "viewer", onWhat: org("o9") });
-      await authz.setParent({ child: doc("dX"), parent: folder("f1"), as: "folderParent" });
-      await authz.setParent({ child: doc("dY"), parent: org("o9"), as: "orgParent" });
+      await authz.setParent({
+        child: doc("dX"),
+        parent: folder("f1"),
+        as: "folderParent",
+      });
+      await authz.setParent({
+        child: doc("dY"),
+        parent: org("o9"),
+        as: "orgParent",
+      });
 
-      assert.equal(await authz.check({ who: u("bob"), canThey: "view", onWhat: doc("dX") }), true);
-      assert.equal(await authz.check({ who: u("bob"), canThey: "view", onWhat: doc("dY") }), true);
+      assert.equal(
+        await authz.check({
+          who: u("bob"),
+          canThey: "view",
+          onWhat: doc("dX"),
+        }),
+        true,
+      );
+      assert.equal(
+        await authz.check({
+          who: u("bob"),
+          canThey: "view",
+          onWhat: doc("dY"),
+        }),
+        true,
+      );
     });
 
     it("requires `as` for addMember/setParent when multiple relations exist", async () => {
@@ -93,10 +149,18 @@ describe("engine v2", () => {
 
   describe("field opt-in propagation", () => {
     it("does NOT split ids for object types not in fieldLevelObjects", async () => {
-      await authz.allow({ who: u("carl"), toBe: "viewer", onWhat: folder("f1") });
+      await authz.allow({
+        who: u("carl"),
+        toBe: "viewer",
+        onWhat: folder("f1"),
+      });
       // folder is not field-enabled: "f1#sub" must not inherit from "f1"
       assert.equal(
-        await authz.check({ who: u("carl"), canThey: "view", onWhat: folder("f1#sub") }),
+        await authz.check({
+          who: u("carl"),
+          canThey: "view",
+          onWhat: folder("f1#sub"),
+        }),
         false,
       );
     });
@@ -104,25 +168,53 @@ describe("engine v2", () => {
     it("inherits a field id from its base via a DIRECT grant", async () => {
       await authz.allow({ who: u("dan"), toBe: "owner", onWhat: doc("d1") });
       assert.equal(
-        await authz.check({ who: u("dan"), canThey: "view", onWhat: doc("d1#title") }),
+        await authz.check({
+          who: u("dan"),
+          canThey: "view",
+          onWhat: doc("d1#title"),
+        }),
         true,
       );
     });
 
     it("inherits a field id from its base via a GROUP grant", async () => {
-      await authz.allow({ who: team("t1") as any, toBe: "viewer", onWhat: doc("d1") });
-      await authz.addMember({ member: u("erin"), group: team("t1"), as: "member" });
+      await authz.allow({
+        who: team("t1") as any,
+        toBe: "viewer",
+        onWhat: doc("d1"),
+      });
+      await authz.addMember({
+        member: u("erin"),
+        group: team("t1"),
+        as: "member",
+      });
       assert.equal(
-        await authz.check({ who: u("erin"), canThey: "view", onWhat: doc("d1#title") }),
+        await authz.check({
+          who: u("erin"),
+          canThey: "view",
+          onWhat: doc("d1#title"),
+        }),
         true,
       );
     });
 
     it("inherits a field id from its base via a HIERARCHY grant", async () => {
-      await authz.allow({ who: u("fin"), toBe: "viewer", onWhat: folder("f1") });
-      await authz.setParent({ child: doc("d1"), parent: folder("f1"), as: "folderParent" });
+      await authz.allow({
+        who: u("fin"),
+        toBe: "viewer",
+        onWhat: folder("f1"),
+      });
+      await authz.setParent({
+        child: doc("d1"),
+        parent: folder("f1"),
+        as: "folderParent",
+      });
       assert.equal(
-        await authz.check({ who: u("fin"), canThey: "view", onWhat: doc("d1#title") }),
+        await authz.check({
+          who: u("fin"),
+          canThey: "view",
+          onWhat: doc("d1#title"),
+        }),
         true,
       );
     });
@@ -139,7 +231,11 @@ describe("engine v2", () => {
     it("does not treat an empty base as a wildcard", async () => {
       // No grant exists; a query with a leading separator must not match anything.
       assert.equal(
-        await authz.check({ who: u("h"), canThey: "view", onWhat: doc("#secret") }),
+        await authz.check({
+          who: u("h"),
+          canThey: "view",
+          onWhat: doc("#secret"),
+        }),
         false,
       );
     });
@@ -147,11 +243,36 @@ describe("engine v2", () => {
 
   describe("wildcard / public subjects", () => {
     it("grants to everyone(type) authorize any subject of that type", async () => {
-      await authz.allow({ who: everyone("user"), toBe: "viewer", onWhat: doc("pub") });
-      assert.equal(await authz.check({ who: u("anyone"), canThey: "view", onWhat: doc("pub") }), true);
-      assert.equal(await authz.check({ who: u("other"), canThey: "view", onWhat: doc("pub") }), true);
+      await authz.allow({
+        who: everyone("user"),
+        toBe: "viewer",
+        onWhat: doc("pub"),
+      });
+      assert.equal(
+        await authz.check({
+          who: u("anyone"),
+          canThey: "view",
+          onWhat: doc("pub"),
+        }),
+        true,
+      );
+      assert.equal(
+        await authz.check({
+          who: u("other"),
+          canThey: "view",
+          onWhat: doc("pub"),
+        }),
+        true,
+      );
       // viewer does not grant edit
-      assert.equal(await authz.check({ who: u("anyone"), canThey: "edit", onWhat: doc("pub") }), false);
+      assert.equal(
+        await authz.check({
+          who: u("anyone"),
+          canThey: "edit",
+          onWhat: doc("pub"),
+        }),
+        false,
+      );
     });
   });
 
@@ -161,18 +282,34 @@ describe("engine v2", () => {
         who: u("ivy"),
         toBe: "viewer",
         onWhat: doc("p1"),
-        when: { attributes: [{ attribute: "dept", operator: "eq", value: "eng" }] },
+        when: {
+          attributes: [{ attribute: "dept", operator: "eq", value: "eng" }],
+        },
       });
       assert.equal(
-        await authz.check({ who: u("ivy"), canThey: "view", onWhat: doc("p1"), context: { dept: "eng" } }),
+        await authz.check({
+          who: u("ivy"),
+          canThey: "view",
+          onWhat: doc("p1"),
+          context: { dept: "eng" },
+        }),
         true,
       );
       assert.equal(
-        await authz.check({ who: u("ivy"), canThey: "view", onWhat: doc("p1"), context: { dept: "sales" } }),
+        await authz.check({
+          who: u("ivy"),
+          canThey: "view",
+          onWhat: doc("p1"),
+          context: { dept: "sales" },
+        }),
         false,
       );
       assert.equal(
-        await authz.check({ who: u("ivy"), canThey: "view", onWhat: doc("p1") }),
+        await authz.check({
+          who: u("ivy"),
+          canThey: "view",
+          onWhat: doc("p1"),
+        }),
         false,
       );
     });
@@ -184,12 +321,35 @@ describe("engine v2", () => {
       const a = new AuthSystem({ storage: counting, schema });
 
       // Diamond: alice in g0a and g0b; both members of mid; mid views doc.
-      await a.allow({ who: team("mid") as any, toBe: "viewer", onWhat: doc("dia") });
-      await a.addMember({ member: team("g0a") as any, group: team("mid"), as: "member" });
-      await a.addMember({ member: team("g0b") as any, group: team("mid"), as: "member" });
-      await a.addMember({ member: u("alice"), group: team("g0a"), as: "member" });
-      await a.addMember({ member: u("alice"), group: team("g0b"), as: "member" });
-      assert.equal(await a.check({ who: u("alice"), canThey: "view", onWhat: doc("dia") }), true);
+      await a.allow({
+        who: team("mid") as any,
+        toBe: "viewer",
+        onWhat: doc("dia"),
+      });
+      await a.addMember({
+        member: team("g0a") as any,
+        group: team("mid"),
+        as: "member",
+      });
+      await a.addMember({
+        member: team("g0b") as any,
+        group: team("mid"),
+        as: "member",
+      });
+      await a.addMember({
+        member: u("alice"),
+        group: team("g0a"),
+        as: "member",
+      });
+      await a.addMember({
+        member: u("alice"),
+        group: team("g0b"),
+        as: "member",
+      });
+      assert.equal(
+        await a.check({ who: u("alice"), canThey: "view", onWhat: doc("dia") }),
+        true,
+      );
 
       // No-grant lattice that would blow up exponentially without memoization.
       const lat = new CountingAdapter();
@@ -197,7 +357,11 @@ describe("engine v2", () => {
       const WIDTH = 2;
       const LAYERS = 10;
       for (let i = 0; i < WIDTH; i++) {
-        await b.addMember({ member: u("zoe"), group: team(`L0_${i}`), as: "member" });
+        await b.addMember({
+          member: u("zoe"),
+          group: team(`L0_${i}`),
+          as: "member",
+        });
       }
       for (let layer = 0; layer < LAYERS - 1; layer++) {
         for (let i = 0; i < WIDTH; i++) {
@@ -211,7 +375,11 @@ describe("engine v2", () => {
         }
       }
       lat.findCalls = 0;
-      const result = await b.check({ who: u("zoe"), canThey: "view", onWhat: doc("none") });
+      const result = await b.check({
+        who: u("zoe"),
+        canThey: "view",
+        onWhat: doc("none"),
+      });
       assert.equal(result, false);
       // Memoized traversal is linear in distinct nodes (~290 here); without
       // memoization a 10-deep width-2 lattice would be exponential (thousands).
@@ -226,13 +394,22 @@ describe("engine v2", () => {
     const buildChain = async (a: AuthSystem<typeof schema>, depth: number) => {
       await a.addMember({ member: u("kim"), group: team("c0"), as: "member" });
       for (let i = 0; i < depth; i++) {
-        await a.addMember({ member: team(`c${i}`) as any, group: team(`c${i + 1}`), as: "member" });
+        await a.addMember({
+          member: team(`c${i}`) as any,
+          group: team(`c${i + 1}`),
+          as: "member",
+        });
       }
       // No grant anywhere — forces full descent to the depth cap.
     };
 
     it("throws MaxDepthExceededError when maxDepthBehavior is 'throw'", async () => {
-      const a = new AuthSystem({ storage: new InMemoryStorageAdapter(), schema, defaultCheckDepth: 2, maxDepthBehavior: "throw" });
+      const a = new AuthSystem({
+        storage: new InMemoryStorageAdapter(),
+        schema,
+        defaultCheckDepth: 2,
+        maxDepthBehavior: "throw",
+      });
       await buildChain(a, 6);
       await assert.rejects(
         a.check({ who: u("kim"), canThey: "view", onWhat: doc("z") }),
@@ -250,17 +427,39 @@ describe("engine v2", () => {
         logger: { warn: (m) => warnings.push(m), error: () => {} },
       });
       await buildChain(a, 6);
-      assert.equal(await a.check({ who: u("kim"), canThey: "view", onWhat: doc("z") }), false);
+      assert.equal(
+        await a.check({ who: u("kim"), canThey: "view", onWhat: doc("z") }),
+        false,
+      );
       assert.ok(warnings.length > 0, "Expected a depth warning to be logged");
     });
   });
 
   describe("cycle safety", () => {
     it("terminates on a membership cycle", async () => {
-      await authz.addMember({ member: team("a") as any, group: team("b"), as: "member" });
-      await authz.addMember({ member: team("b") as any, group: team("a"), as: "member" });
-      await authz.addMember({ member: u("lee"), group: team("a"), as: "member" });
-      assert.equal(await authz.check({ who: u("lee"), canThey: "view", onWhat: doc("nope") }), false);
+      await authz.addMember({
+        member: team("a") as any,
+        group: team("b"),
+        as: "member",
+      });
+      await authz.addMember({
+        member: team("b") as any,
+        group: team("a"),
+        as: "member",
+      });
+      await authz.addMember({
+        member: u("lee"),
+        group: team("a"),
+        as: "member",
+      });
+      assert.equal(
+        await authz.check({
+          who: u("lee"),
+          canThey: "view",
+          onWhat: doc("nope"),
+        }),
+        false,
+      );
     });
   });
 });

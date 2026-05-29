@@ -278,7 +278,12 @@ export type ExplainNode =
   | { kind: "wildcard"; relation: string }
   | { kind: "field"; base: AnyObject; via: ExplainNode }
   | { kind: "group"; relation: string; through: AnyObject; via: ExplainNode }
-  | { kind: "hierarchy"; relation: string; parent: AnyObject; via: ExplainNode };
+  | {
+      kind: "hierarchy";
+      relation: string;
+      parent: AnyObject;
+      via: ExplainNode;
+    };
 
 /** Result of `explain()`: the decision plus the granting path (null when denied). */
 export type ExplainResult = { allowed: boolean; via: ExplainNode | null };
