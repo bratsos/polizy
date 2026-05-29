@@ -1,40 +1,40 @@
-import type { StorageAdapter } from "./polizy.storage.ts";
-import type {
-  Subject,
-  AnyObject,
-  AuthSchema,
-  InputTuple,
-  Condition,
-  TypedRelation,
-  TypedAction,
-  StoredTuple,
-  TupleSubject,
-  SchemaSubjectTypes,
-  SchemaObjectTypes,
-  ListAccessibleObjectsArgs,
-  ListAccessibleObjectsResult,
-  AccessibleObject,
-  TypedObject,
-  TypedSubject,
-  ExplainNode,
-  ExplainResult,
-  Logger,
-} from "./types.ts";
-import { PUBLIC_ID } from "./types.ts";
-import {
-  ConfigurationError,
-  SchemaError,
-  MaxDepthExceededError,
-  NotAuthorizedError,
-} from "./errors.ts";
 import { isConditionValid } from "./conditions.ts";
 import {
+  ConfigurationError,
+  MaxDepthExceededError,
+  NotAuthorizedError,
+  SchemaError,
+} from "./errors.ts";
+import type { StorageAdapter } from "./polizy.storage.ts";
+import {
+  fieldSeparator,
   groupRelations,
   hierarchyRelations,
-  fieldSeparator,
   isFieldType,
   resolveRelation,
 } from "./schema.ts";
+import type {
+  AccessibleObject,
+  AnyObject,
+  AuthSchema,
+  Condition,
+  ExplainNode,
+  ExplainResult,
+  InputTuple,
+  ListAccessibleObjectsArgs,
+  ListAccessibleObjectsResult,
+  Logger,
+  SchemaObjectTypes,
+  SchemaSubjectTypes,
+  StoredTuple,
+  Subject,
+  TupleSubject,
+  TypedAction,
+  TypedObject,
+  TypedRelation,
+  TypedSubject,
+} from "./types.ts";
+import { PUBLIC_ID } from "./types.ts";
 
 const noopLogger: Logger = { warn: () => {}, error: () => {} };
 
@@ -200,7 +200,12 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       });
       for (const tuple of holders) {
         addCandidate(tuple.subject);
-        await this.collectGroupMembers(tuple.subject, addCandidate, new Set(), 0);
+        await this.collectGroupMembers(
+          tuple.subject,
+          addCandidate,
+          new Set(),
+          0,
+        );
       }
     }
 
@@ -224,7 +229,9 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     options?: { limit?: number; offset?: number },
   ): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[]> {
     const results = await this.storage.findTuples(
-      filter as Partial<InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>>,
+      filter as Partial<
+        InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>
+      >,
       options,
     );
     return results as StoredTuple<
@@ -267,7 +274,8 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
 
     // 1. Objects the subject has a direct relationship to.
     for (const tuple of await this.storage.findTuples({ subject: who })) {
-      if (isConditionValid(tuple.condition, context)) addPotential(tuple.object);
+      if (isConditionValid(tuple.condition, context))
+        addPotential(tuple.object);
     }
 
     // 2. Objects reachable via the subject's groups (transitively).
@@ -321,7 +329,9 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         .map(async (obj) => {
           const allowed: TypedAction<S>[] = [];
           for (const action of allActions) {
-            if (await this.check({ who, canThey: action, onWhat: obj, context })) {
+            if (
+              await this.check({ who, canThey: action, onWhat: obj, context })
+            ) {
               allowed.push(action);
             }
           }
@@ -723,7 +733,10 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
             object: target as AnyObject<SchemaObjectTypes<S>>,
           })) {
             if (isConditionValid(tuple.condition, context)) {
-              return wrap(target, { kind: "direct", relation: relation as string });
+              return wrap(target, {
+                kind: "direct",
+                relation: relation as string,
+              });
             }
           }
           if (who.id !== PUBLIC_ID) {
