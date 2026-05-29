@@ -37,6 +37,7 @@
     "build:bundle": "rollup -c",
     "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle",
     "dev": "rollup -c -w",
+    "pretest": "prisma generate",
     "test": "dotenv -e ../../examples/app1/.env -- node --test src/*.test.ts src/**/*.test.ts"
   },
   "keywords": [
