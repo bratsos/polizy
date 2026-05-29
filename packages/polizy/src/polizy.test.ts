@@ -203,6 +203,7 @@ describe("AuthSystem Core Tests", () => {
         await authSystem.addMember({
           member: { type: "user", id: "alice" },
           group: { type: "group", id: "devs" },
+          as: "member",
         });
         await authSystem.allow({
           who: { type: "group", id: "devs" },
@@ -265,10 +266,12 @@ describe("AuthSystem Core Tests", () => {
         await authSystem.addMember({
           member: { type: "group", id: "frontend" },
           group: { type: "group", id: "devs" },
+          as: "member",
         });
         await authSystem.addMember({
           member: { type: "user", id: "charlie" },
           group: { type: "group", id: "frontend" },
+          as: "member",
         });
 
         const result = authSystem.check({
@@ -459,6 +462,7 @@ describe("AuthSystem Core Tests", () => {
         await authSystem.addMember({
           member: { type: "user", id: "alice" },
           group: { type: "group", id: "devs" },
+          as: "member",
         });
         await authSystem.allow({
           who: { type: "group", id: "devs" },
@@ -606,6 +610,7 @@ describe("AuthSystem Core Tests", () => {
         await authSystem.addMember({
           member: { type: "user", id: "alice" },
           group: { type: "group", id: "devs" },
+          as: "member",
         });
         await authSystem.allow({
           who: { type: "group", id: "devs" },
@@ -689,6 +694,7 @@ describe("AuthSystem Core Tests", () => {
       const schema = defineSchema({
         relations: { viewer: { type: "direct" } },
         actionToRelations: { view: ["viewer"] },
+        fieldLevelObjects: ["doc"],
       });
       let authSystem: AuthSystem<typeof schema>;
 

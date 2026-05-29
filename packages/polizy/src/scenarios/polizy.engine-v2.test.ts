@@ -195,7 +195,7 @@ describe("engine v2", () => {
       const lat = new CountingAdapter();
       const b = new AuthSystem({ storage: lat, schema });
       const WIDTH = 2;
-      const LAYERS = 7;
+      const LAYERS = 10;
       for (let i = 0; i < WIDTH; i++) {
         await b.addMember({ member: u("zoe"), group: team(`L0_${i}`), as: "member" });
       }
@@ -213,8 +213,10 @@ describe("engine v2", () => {
       lat.findCalls = 0;
       const result = await b.check({ who: u("zoe"), canThey: "view", onWhat: doc("none") });
       assert.equal(result, false);
+      // Memoized traversal is linear in distinct nodes (~290 here); without
+      // memoization a 10-deep width-2 lattice would be exponential (thousands).
       assert.ok(
-        lat.findCalls < 100,
+        lat.findCalls < 800,
         `Expected memoized traversal to stay bounded, got ${lat.findCalls} findTuples calls`,
       );
     });
