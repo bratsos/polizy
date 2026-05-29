@@ -2,385 +2,288 @@
 
 [![npm version](https://badge.fury.io/js/polizy.svg)](https://badge.fury.io/js/polizy)
 
-`polizy` is a flexible, [Zanzibar](https://research.google/pubs/pub48190/)-inspired authorization library for Node.js and TypeScript applications. It allows you to define complex permission models based on relationships between users, groups, and resources directly within your application code.
+`polizy` is a flexible, [Zanzibar](https://research.google/pubs/pub48190/)-inspired authorization library for Node.js and TypeScript. It lets you model fine-grained permissions as **relationships** between users, groups, and resources — directly in your application, with no separate authorization service to run.
 
-## Problem Solved
+```ts
+import { AuthSystem, InMemoryStorageAdapter, defineSchema } from "polizy";
 
-Managing permissions in applications can quickly become complex. Traditional Role-Based Access Control (RBAC) often falls short when dealing with fine-grained permissions based on relationships (e.g., "user A can edit document B because they are in group C, which owns document B"). `polizy` provides a structured way to define and check these kinds of permissions.
+const schema = defineSchema({
+  relations: { owner: { type: "direct" }, viewer: { type: "direct" } },
+  actionToRelations: { edit: ["owner"], view: ["owner", "viewer"] },
+});
 
-## Key Features
+const authz = new AuthSystem({ storage: new InMemoryStorageAdapter(), schema });
 
-*   **Embeddable Library:** Unlike self-hosted authorization services (e.g., OpenFGA, Cerbos, Ory Keto), `polizy` is integrated directly into your application, simplifying deployment and infrastructure.
-*   **Type-Safe Schema:** Define your authorization model using TypeScript for compile-time checks and better developer experience.
-*   **Relationship-Based Access:** Permissions are determined by relationships (tuples) stored between subjects and objects.
-*   **Hierarchy Support:** Define parent-child relationships (e.g., folders and files) and automatically propagate permissions.
-*   **Group Support:** Manage permissions through group memberships.
-*   **Pluggable Storage:** Comes with an in-memory adapter for testing/development and a Prisma adapter for persistent storage. Easily extendable with custom adapters.
+await authz.allow({ who: { type: "user", id: "alice" }, toBe: "owner", onWhat: { type: "doc", id: "1" } });
+await authz.check({ who: { type: "user", id: "alice" }, canThey: "edit", onWhat: { type: "doc", id: "1" } }); // true
+```
+
+## Why polizy
+
+* **Embeddable.** Unlike self-hosted services (OpenFGA, Ory Keto, SpiceDB), `polizy` runs in-process — no extra infrastructure.
+* **Relationship-based (ReBAC).** Permissions follow relationships: *"alice can edit doc B because she's in team C, which owns folder D, which contains B."*
+* **Type-safe schema.** `defineSchema` captures your relations and actions as literal types, so `check`/`allow` autocomplete and reject typos.
+* **Groups & hierarchy.** First-class nested groups and parent/child propagation (folders → files), with support for **multiple** group and hierarchy relations.
+* **Conditions (time + ABAC).** Grants can be time-boxed (`validUntil`) and/or gated on attribute predicates evaluated against a per-check `context`.
+* **Pluggable storage.** Ships an in-memory adapter (tests/dev) and a Prisma adapter (production). Both honor an identical, contract-tested behavior.
+* **Fail-closed.** Unknown actions, exceeded depth, and malformed conditions deny rather than leak.
 
 ## Installation
 
 ```bash
-# Using npm
-npm install polizy
-
-# Using yarn
-yarn add polizy
-
-# Using pnpm
-pnpm add polizy
+npm install polizy      # or: pnpm add polizy / yarn add polizy
 ```
 
-## Core Concepts
+The Prisma adapter requires `@prisma/client` (an optional peer dependency) — install it only if you use persistent storage.
 
-*   **Subject:** Who is performing an action (e.g., `user:alice`).
-*   **Object:** What is the action being performed on (e.g., `document:xyz`, `folder:abc`). Can also represent groups or hierarchical parents.
-*   **Relation:** The relationship between a Subject and an Object (e.g., `owner`, `editor`, `viewer`, `member`, `parent`).
-*   **Action:** The specific operation a Subject wants to perform on an Object (e.g., `view`, `edit`, `delete`).
-*   **Tuple:** A stored record representing a relationship (`Subject` has `Relation` to `Object`, optionally with `Condition`). E.g., `(user:alice, owner, document:xyz)`.
-*   **Schema:** Defines the possible `SubjectTypes`, `ObjectTypes`, `Relations`, and how `Actions` map to `Relations`. Also defines relation types (`direct`, `group`, `hierarchy`).
-*   **Storage Adapter:** Handles the persistence of tuples (e.g., `InMemoryStorageAdapter`, `PrismaStorageAdapter`).
+## Core concepts
 
-## Setup
+| Concept | Meaning |
+|---|---|
+| **Subject** | Who is acting — `{ type: "user", id: "alice" }`. A group can also act as a subject. |
+| **Object** | What is acted on — `{ type: "doc", id: "1" }`. |
+| **Relation** | A stored relationship name (`owner`, `viewer`, `member`, `parent`), typed `direct`, `group`, or `hierarchy`. |
+| **Action** | An intent (`view`, `edit`, `delete`) mapped to the relations that grant it. |
+| **Tuple** | A stored fact: `(subject, relation, object[, condition])`. |
+| **Condition** | Optional constraints on a tuple: a time window and/or attribute predicates. |
 
-To start using `polizy`, you need to:
+`polizy` is **grants-only** (like Zanzibar): there are no "deny" tuples. Model exceptions with narrower relations/objects rather than negative rules (see [Limitations](#limitations)).
 
-1.  **Define a Schema:** Create an authorization model using `defineSchema`. This specifies your object types, subject types, the relationships between them, and how actions map to these relationships.
-2.  **Choose a Storage Adapter:** Select how relationship tuples will be stored. Use `InMemoryStorageAdapter` for quick starts or `PrismaStorageAdapter` (requires `@prisma/client`) for database persistence.
-3.  **Instantiate AuthSystem:** Create an instance of `AuthSystem` with your schema and storage adapter.
+## 1. Define a schema
 
-## API Usage
+```ts
+import { defineSchema } from "polizy";
 
-### 1. Define Your Schema
+const schema = defineSchema({
+  subjectTypes: ["user", "team"],
+  objectTypes: ["document", "folder", "team"],
 
-Use `defineSchema` to create your authorization model.
-
-```typescript
-import { defineSchema } from 'polizy';
-
-const mySchema = defineSchema({
-  subjectTypes: ['user', 'service_account'],
-  objectTypes: ['document', 'folder', 'team'], // Ensure 'team' is an object type if used in relations
   relations: {
-    // Direct relations
-    owner: { type: 'direct' },
-    editor: { type: 'direct' },
-    viewer: { type: 'direct' },
-    // Group relation
-    member: { type: 'group' }, // 'member' relation links subjects to 'team' objects
-    // Hierarchy relation
-    parent: { type: 'hierarchy' }, // 'parent' relation links 'document'/'folder' to 'folder' objects
+    owner: { type: "direct" },
+    editor: { type: "direct" },
+    viewer: { type: "direct" },
+    member: { type: "group" },      // links a subject to a group it belongs to
+    parent: { type: "hierarchy" },  // links a child object to its parent
   },
+
   actionToRelations: {
-    // Define which relations grant which actions
-    view: ['viewer', 'editor', 'owner', 'member'], // Direct viewers/editors/owners OR members of a team linked via 'viewer'/'editor'/'owner'
-    edit: ['editor', 'owner'],
-    delete: ['owner'],
-    manage_members: ['owner'], // Only owners of a 'team' can manage members
-    share: ['owner', 'editor'],
+    view: ["viewer", "editor", "owner", "member"],
+    edit: ["editor", "owner"],
+    delete: ["owner"],
   },
-  // Optional: Define how permissions propagate up hierarchies
+
+  // How permissions flow from a parent to its children.
   hierarchyPropagation: {
-     // If a user can 'view' the parent 'folder', they can also 'view' the child 'document'/'folder'
-    view: ['view'],
-     // If a user can 'edit' the parent 'folder', they can also 'edit' the child 'document'/'folder'
-    edit: ['edit'],
-    // Actions without propagation rules can be omitted or explicitly empty
+    view: ["view"], // if you can view the parent, you can view the child
+    edit: ["edit"],
     delete: [],
-    manage_members: [],
-    share: [],
-  }
+  },
+
+  // Opt in to field-level identifiers (see "Field-level permissions").
+  fieldLevelObjects: ["document"],
+  // fieldSeparator defaults to "#"
 });
 ```
 
-### 2. Choose a Storage Adapter
+`defineSchema` **throws** a `SchemaError` if an action maps to an undefined relation or `hierarchyPropagation` references an undefined action — catching model mistakes at startup.
 
-Polizy provides adapters for persistence.
+You can declare **multiple** `group` and `hierarchy` relations (e.g. `member` + `orgMember`, `folderParent` + `orgParent`). `check` traverses them all.
 
-*   **`InMemoryStorageAdapter`:** Good for testing or simple use cases. Data is lost on restart.
-*   **`PrismaStorageAdapter`:** Persists tuples in your database using Prisma.
-    *   Requires `@prisma/client` to be installed.
-    *   Requires a Prisma model (typically named `PolizyTuple` or similar) in your `schema.prisma` file to store the relationship tuples. The model should include the following fields:
-        *   `subjectType`: String
-        *   `subjectId`: String
-        *   `relation`: String
-        *   `objectType`: String
-        *   `objectId`: String
-        *   `condition`: Json? (Optional, for attribute-based access control)
-    *   It's highly recommended to add a unique constraint and relevant indexes for performance.
+## 2. Choose a storage adapter
 
-    Example Prisma Model:
-    ```prisma
-    // filepath: prisma/schema.prisma
-    model PolizyTuple {
-      id String @id @default(uuid()) // Optional, but good practice
-
-      subjectType String // e.g., 'user', 'team'
-      subjectId   String // e.g., 'alice', 'team-alpha'
-      relation    String // e.g., 'owner', 'member', 'parent'
-      objectType  String // e.g., 'document', 'folder'
-      objectId    String // e.g., 'doc1', 'folder-a'
-      condition   Json?  // Optional ABAC conditions
-
-      createdAt DateTime @default(now()) // Optional timestamp
-
-      // Ensure each relationship is unique
-      @@unique([subjectType, subjectId, relation, objectType, objectId])
-      // Index for finding relationships FOR a subject
-      @@index([subjectType, subjectId, relation])
-      // Index for finding relationships ON an object
-      @@index([objectType, objectId, relation])
-    }
-    ```
-    *   Instantiate with `new PrismaStorageAdapter(prismaClientInstance)`.
-
-```typescript
-// filepath: /path/to/your/auth/setup.ts
-import { InMemoryStorageAdapter } from 'polizy';
-// OR
-import { PrismaStorageAdapter } from 'polizy/prisma-storage';
-import { PrismaClient } from '@prisma/client'; // Adjust import based on your generated client location
-
-// const prisma = new PrismaClient();
-const storage = new InMemoryStorageAdapter();
-// const storage = new PrismaStorageAdapter(prisma); // Example using Prisma
+```ts
+import { InMemoryStorageAdapter } from "polizy";
+const storage = new InMemoryStorageAdapter(); // data lost on restart — great for tests
 ```
 
-### 3. Instantiate the AuthSystem
+For persistence, use the Prisma adapter from the `polizy/prisma-storage` subpath (kept separate so the core import never pulls in `@prisma/client`):
 
-Combine the schema and storage adapter.
+```ts
+import { PrismaStorageAdapter } from "polizy/prisma-storage"; // alias of PrismaAdapter
+import { PrismaClient } from "@prisma/client";
 
-```typescript
-import { AuthSystem } from 'polizy';
+const storage = PrismaStorageAdapter(new PrismaClient());
+```
+
+> `PrismaStorageAdapter` is a **factory function**, not a class — call it, don't `new` it. `PrismaAdapter` is the same function under its original name.
+
+Add a model to your `schema.prisma`. The unique constraint is **required** — it makes grants idempotent:
+
+```prisma
+model PolizyTuple {
+  id          String  @id @default(cuid())
+  subjectType String
+  subjectId   String
+  relation    String
+  objectType  String
+  objectId    String
+  condition   Json?
+
+  @@unique([subjectType, subjectId, relation, objectType, objectId])
+  @@index([subjectType, subjectId, relation])
+  @@index([objectType, objectId, relation])
+}
+```
+
+Run `prisma generate` (and `prisma migrate`/`db push`) so the client knows the compound unique key.
+
+## 3. Create the AuthSystem
+
+```ts
+import { AuthSystem } from "polizy";
 
 const authz = new AuthSystem({
-  schema: mySchema,
-  storage: storage,
+  storage,
+  schema,
+  defaultCheckDepth: 20,        // max group/hierarchy hops (default 20)
+  maxDepthBehavior: "throw",    // "throw" MaxDepthExceededError | "deny" (default "throw")
+  logger: console,             // optional; defaults to a no-op (no console noise)
 });
 ```
 
-### 4. Manage Permissions (Tuples)
+## 4. Grant & revoke (idempotent)
 
-Use `allow`, `disallowAllMatching`, `addMember`, `removeMember`, `setParent`, `removeParent`.
+```ts
+// Direct grant
+await authz.allow({ who: { type: "user", id: "alice" }, toBe: "owner", onWhat: { type: "document", id: "doc1" } });
 
-```typescript
-// Grant direct permission
+// Time-boxed grant
 await authz.allow({
-  who: { type: 'user', id: 'alice' },
-  toBe: 'owner',
-  onWhat: { type: 'document', id: 'doc1' },
+  who: { type: "user", id: "bob" },
+  toBe: "viewer",
+  onWhat: { type: "document", id: "doc1" },
+  when: { validUntil: new Date(Date.now() + 3600_000) }, // 1 hour
 });
 
-// Grant conditional permission (e.g., time-based)
+// Bulk
+await authz.allowMany([
+  { who: { type: "user", id: "carol" }, toBe: "viewer", onWhat: { type: "document", id: "doc1" } },
+  { who: { type: "user", id: "dave" },  toBe: "editor", onWhat: { type: "document", id: "doc1" } },
+]);
+
+// Groups (use `as` only when the schema has more than one group relation)
+await authz.addMember({ member: { type: "user", id: "carol" }, group: { type: "team", id: "alpha" } });
+await authz.removeMember({ member: { type: "user", id: "carol" }, group: { type: "team", id: "alpha" } });
+
+// Hierarchy
+await authz.setParent({ child: { type: "document", id: "doc2" }, parent: { type: "folder", id: "fA" } });
+await authz.removeParent({ child: { type: "document", id: "doc2" }, parent: { type: "folder", id: "fA" } });
+
+// Revoke
+await authz.disallowAllMatching({ who: { type: "user", id: "alice" }, was: "owner", onWhat: { type: "document", id: "doc1" } }); // one tuple
+await authz.disallowAllMatching({ onWhat: { type: "document", id: "doc1" } }); // everything touching doc1 (e.g. on delete)
+await authz.disallowAllMatching({ who: { type: "user", id: "bob" } });          // everything for bob (e.g. on deactivate)
+```
+
+`allow`/`addMember`/`setParent` are **idempotent** on `(subject, relation, object)`: re-running a grant updates its condition instead of creating duplicates. Because of that, a temporary and a standing grant that differ only by condition can't coexist on the same triple — model "temporary + standing" with **distinct relations** (e.g. `viewer` standing, `temp_viewer` time-boxed).
+
+## 5. Check permissions
+
+```ts
+await authz.check({ who: { type: "user", id: "alice" }, canThey: "edit", onWhat: { type: "document", id: "doc1" } });
+// → boolean
+
+// Throw instead of returning false
+await authz.checkOrThrow({ who, canThey: "edit", onWhat }); // throws NotAuthorizedError
+
+// Batch (e.g. filtering a fetched list)
+const [canA, canB] = await authz.checkMany([
+  { who, canThey: "view", onWhat: docA },
+  { who, canThey: "view", onWhat: docB },
+]);
+```
+
+Checks traverse direct grants, group memberships (nested), hierarchy propagation, and wildcard grants — with per-check memoization so even wide/deep org graphs resolve efficiently and cycles terminate safely.
+
+### Attribute conditions (ABAC)
+
+Pass a `context`; grants with attribute predicates are evaluated against it:
+
+```ts
 await authz.allow({
-  who: { type: 'user', id: 'bob' },
-  toBe: 'viewer',
-  onWhat: { type: 'document', id: 'doc1' },
-  when: { validUntil: new Date(Date.now() + 3600 * 1000) } // Valid for 1 hour
+  who: { type: "user", id: "alice" },
+  toBe: "viewer",
+  onWhat: { type: "document", id: "doc1" },
+  when: { attributes: [{ attribute: "department", operator: "eq", value: "engineering" }] },
 });
 
-// Add user to a team
-await authz.addMember({
-  member: { type: 'user', id: 'carol' },
-  group: { type: 'team', id: 'team-alpha' }, // 'team' must be an objectType
-});
-
-// Set a parent folder
-await authz.setParent({
-  child: { type: 'document', id: 'doc2' },
-  parent: { type: 'folder', id: 'folder-a' },
-});
-
-// Revoke a specific permission (equivalent to old disallow)
-await authz.disallowAllMatching({
-  who: { type: 'user', id: 'alice' },
-  was: 'owner',
-  onWhat: { type: 'document', id: 'doc1' },
-});
-
-// Revoke all permissions for a specific user on a specific object
-await authz.disallowAllMatching({
-  who: { type: 'user', id: 'bob' },
-  onWhat: { type: 'document', id: 'doc1' },
-});
-
-// Revoke all 'viewer' permissions on a specific object
-await authz.disallowAllMatching({
-  was: 'viewer',
-  onWhat: { type: 'document', id: 'doc3' },
-});
-
-// Revoke ALL permissions associated with a specific object (e.g., when deleting the object)
-await authz.disallowAllMatching({
-  onWhat: { type: 'document', id: 'doc-to-delete' },
-});
-
-// Revoke ALL permissions granted to a specific user (e.g., when deactivating the user)
-await authz.disallowAllMatching({
-  who: { type: 'user', id: 'user-to-deactivate' },
-});
+await authz.check({ who: { type: "user", id: "alice" }, canThey: "view", onWhat: { type: "document", id: "doc1" },
+  context: { department: "engineering" } }); // true
 ```
 
-### 5. Check Permissions
+Operators: `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`. `attribute` supports dot-paths (`"user.tier"`). A missing context value or type mismatch fails the predicate (fail-closed). Conditions can combine a time window and predicates (all must pass).
 
-Use the `check` method.
+### Public / wildcard access
 
-```typescript
-const canAliceView = await authz.check({
-  who: { type: 'user', id: 'alice' },
-  canThey: 'view',
-  onWhat: { type: 'document', id: 'doc1' },
-});
-// Result: false (since we removed the 'owner' relation for alice above, and view requires owner/editor/viewer)
-
-const canBobView = await authz.check({
-  who: { type: 'user', id: 'bob' },
-  canThey: 'view',
-  onWhat: { type: 'document', id: 'doc1' },
-});
-// Result: true (if within the validUntil time)
-
-// Check permission potentially inherited via hierarchy
-const canAliceViewDoc2 = await authz.check({
-  who: { type: 'user', id: 'alice' }, // Assuming alice has 'view' on 'folder-a'
-  canThey: 'view',
-  onWhat: { type: 'document', id: 'doc2' }, // doc2 is child of folder-a
-});
-// Result: true (if hierarchyPropagation is set and alice can view folder-a)
-
-// Check permission potentially inherited via group membership
-const canCarolViewDoc3 = await authz.check({
-  who: { type: 'user', id: 'carol' }, // carol is member of team-alpha
-  canThey: 'view',
-  onWhat: { type: 'document', id: 'doc3' }, // Assuming team-alpha was granted 'viewer' on doc3
-});
-// Result: true
+```ts
+import { everyone } from "polizy";
+await authz.allow({ who: everyone("user"), toBe: "viewer", onWhat: { type: "document", id: "public" } });
+// now any user passes `view` on document:public
 ```
 
-### 6. List Accessible Objects (and their permissions)
+## 6. List & explain
 
-Use the `listAccessibleObjects` method to find all objects of a specific type a subject can interact with, along with the specific actions allowed for each object identifier (including field-level identifiers). This is useful for building UI elements that only show items a user can interact with.
+```ts
+// What can this subject access (and with which actions)?
+const { accessible } = await authz.listAccessibleObjects({ who: { type: "user", id: "alice" }, ofType: "document" });
+// [{ object: { type:"document", id:"doc1" }, actions: ["view","edit",...], parent? }, ...]
+//  optional filters: canThey, limit, offset
 
-```typescript
-// Find all documents Alice can access and what she can do with each
-const aliceDocs = await authz.listAccessibleObjects({
-  who: { type: 'user', id: 'alice' },
-  ofType: 'document',
-});
+// Who can perform an action on this object? (reverse expansion)
+const subjects = await authz.listSubjects({ canThey: "view", onWhat: { type: "document", id: "doc1" } });
 
-/* Example Result for aliceDocs.accessible:
-[
-  {
-    object: { type: 'document', id: 'doc1' }, // Alice is owner
-    // Note: Actions depend on the specific schema. 'manage_members' might appear if 'owner' grants it.
-    actions: [ 'delete', 'edit', 'manage_members', 'share', 'view' ]
-  },
-  {
-    object: { type: 'document', id: 'doc2' }, // Alice has view via hierarchy from folder-a
-    actions: [ 'view' ]
-  },
-  {
-    object: { type: 'document', id: 'doc9#field' }, // Alice has direct view on field
-    actions: [ 'view' ]
-  }
-  // Note: Base object 'doc9' would only appear if Alice had direct/group/hierarchy access to it specifically.
-]
-*/
+// Why was a check allowed/denied?
+const why = await authz.explain({ who: { type: "user", id: "carol" }, canThey: "view", onWhat: { type: "document", id: "doc1" } });
+// { allowed: true, via: { kind: "group", relation: "member", through: {type:"team",id:"alpha"}, via: { kind:"direct", relation:"viewer" } } }
 
-// Find only documents that Carol (member of team-alpha) can 'edit'
-const carolEditableDocs = await authz.listAccessibleObjects({
-  who: { type: 'user', id: 'carol' },
-  ofType: 'document',
-  canThey: 'edit', // Optional filter
-});
-
-/* Example Result for carolEditableDocs.accessible:
-[
-  {
-    object: { type: 'document', id: 'doc3' }, // team-alpha is editor
-    actions: [ 'edit', 'share', 'view' ] // Returns all allowed actions for the object, even when filtering by one action
-  }
-  // Assuming doc5 was also editable via hierarchy in the full setup
-  // { object: { type: 'document', id: 'doc5' }, actions: [ 'edit', 'share', 'view' ] }
-]
-*/
+// Raw tuples (paginated)
+await authz.listTuples({ subject: { type: "user", id: "alice" } }, { limit: 50, offset: 0 });
 ```
+
+`listAccessibleObjects` scales with the subject's reachable set (no full-table scan).
+
+## Field-level permissions
+
+For object types listed in `fieldLevelObjects`, an id may carry a field after the separator (default `#`): `document:doc1#summary`. A grant on the **base** object (`doc1`) authorizes its fields (`doc1#summary`) via direct, group, **and** hierarchy paths, while a grant on a specific field stays scoped to that field.
+
+```ts
+await authz.allow({ who: manager, toBe: "owner", onWhat: { type: "document", id: "cert1" } });
+await authz.allow({ who: employee, toBe: "viewer", onWhat: { type: "document", id: "cert1#strengths" } });
+
+await authz.check({ who: manager,  canThey: "view", onWhat: { type: "document", id: "cert1#strengths" } }); // true (base → field)
+await authz.check({ who: employee, canThey: "view", onWhat: { type: "document", id: "cert1#weaknesses" } }); // false (other field)
+```
+
+Field ids are validated on write (empty base or empty field throws), and types **not** in `fieldLevelObjects` never split — so ids that naturally contain `#` can't accidentally leak access.
+
+## Custom storage adapters
+
+Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package ships a shared contract test suite you can run against your adapter.
+
+## Limitations
+
+* **Grants-only.** No deny tuples; model exceptions with narrower relations/objects.
+* **Conditions** cover time windows and attribute predicates — not a full policy language.
+* **No consistency tokens.** As an in-process library reading your own store, `polizy` doesn't implement Zanzibar "zookies"/new-enemy protection; reads reflect committed tuples.
+
+## Migrating from 0.1.x → 0.2.0
+
+0.2.0 fixes correctness bugs (especially in the Prisma adapter) and adds APIs. Breaking changes:
+
+* **Prisma import.** Use `import { PrismaStorageAdapter } from "polizy/prisma-storage"` (factory) — the previous README's `new PrismaStorageAdapter(...)` from `"polizy"` never existed. Add the `@@unique` constraint shown above; without it, idempotent upserts can't work.
+* **Field ids are opt-in.** Declare `fieldLevelObjects` for types that use `#`; previously *any* id containing `#` inherited from its prefix (a privilege-bleed risk). This is now off by default.
+* **Depth exceeded throws.** `check` now throws `MaxDepthExceededError` past `defaultCheckDepth` (was a silent `false`). Set `maxDepthBehavior: "deny"` for the old behavior.
+* **`defineSchema` throws** on dangling relation/action references (was a `console.warn`).
+* **Multiple group/hierarchy relations** require `as` on `addMember`/`setParent`/`removeMember`/`removeParent` (inferred when there's exactly one).
+* **No `console` output.** Provide a `logger` if you want warnings.
+* Time-based conditions now round-trip correctly through the Prisma adapter (previously they threw).
+
+New: `checkMany`, `checkOrThrow`, `explain`, `listSubjects`, `allowMany`, wildcard `everyone()`, attribute-predicate conditions, paginated `listTuples`/`listAccessibleObjects`.
 
 ## Examples
 
-See the test files in `src/scenarios/` (especially `polizy.listAccessibleObjects.test.ts`) for more detailed examples covering different authorization patterns like RBAC, ABAC (via conditions), hierarchy, and group-based access.
+See `packages/polizy/src/scenarios/*.test.ts` for runnable scenarios covering RBAC, ABAC, nested groups, hierarchy propagation, field-level permissions, and reorganizations.
 
-*(Example based on `polizy.example1.test.ts`)*
+## License
 
-```typescript
-// Schema for Performance Reviews
-const reviewSchema = defineSchema({
-  subjectTypes: ["user"],
-  objectTypes: ["review"],
-  relations: {
-    owner: { type: "direct" },
-    viewer: { type: "direct" },
-    editor: { type: "direct" },
-  },
-  actionToRelations: {
-    view: ["viewer", "editor", "owner"],
-    edit: ["editor", "owner"],
-    manage: ["owner"],
-  },
-});
-
-const storage = new InMemoryStorageAdapter();
-const authz = new AuthSystem({ storage, schema: reviewSchema });
-
-// Manager owns the review
-await authz.allow({
-  who: { type: "user", id: "manager1" },
-  toBe: "owner",
-  onWhat: { type: "review", id: "cert1" },
-});
-
-// Employee can view a specific section initially
-await authz.allow({
-  who: { type: "user", id: "employee1" },
-  toBe: "viewer",
-  onWhat: { type: "review", id: "cert1#strengths" }, // Object with field-level granularity
-});
-
-// Check: Manager can manage
-assert.ok(await authz.check({
-  who: { type: "user", id: "manager1" },
-  canThey: "manage",
-  onWhat: { type: "review", id: "cert1" },
-})); // true
-
-// Check: Employee can view strengths
-assert.ok(await authz.check({
-  who: { type: "user", id: "employee1" },
-  canThey: "view",
-  onWhat: { type: "review", id: "cert1#strengths" },
-})); // true
-
-// Check: Employee cannot edit strengths initially
-assert.strictEqual(await authz.check({
-  who: { type: "user", id: "employee1" },
-  canThey: "edit",
-  onWhat: { type: "review", id: "cert1#strengths" },
-}), false); // false
-
-// Grant edit permission to employee
-await authz.allow({
-  who: { type: "user", id: "employee1" },
-  toBe: "editor",
-  onWhat: { type: "review", id: "cert1#strengths" },
-});
-
-// Check: Employee can now edit strengths
-assert.ok(await authz.check({
-  who: { type: "user", id: "employee1" },
-  canThey: "edit",
-  onWhat: { type: "review", id: "cert1#strengths" },
-})); // true
-```
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
+MIT
