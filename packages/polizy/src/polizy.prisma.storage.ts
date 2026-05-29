@@ -73,7 +73,6 @@ export function PrismaAdapter<
             },
             create: { ...key, ...condition },
             update: condition,
-            // biome-ignore lint/suspicious/noExplicitAny: see comment above
           } as any);
         }),
       );
