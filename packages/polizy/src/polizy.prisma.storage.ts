@@ -63,13 +63,17 @@ export function PrismaAdapter<
           };
           const condition =
             tuple.condition !== undefined ? { condition: tuple.condition } : {};
+          // The compound-unique `where` shape comes from the consumer's own
+          // generated Prisma client; @prisma/client's default types don't model
+          // this project's `@@unique`, so the argument is asserted here.
           return p.polizyTuple.upsert({
             where: {
               subjectType_subjectId_relation_objectType_objectId: key,
             },
             create: { ...key, ...condition },
             update: condition,
-          });
+            // biome-ignore lint/suspicious/noExplicitAny: see comment above
+          } as any);
         }),
       );
 

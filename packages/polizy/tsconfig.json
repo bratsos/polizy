@@ -1,29 +1,22 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "esModuleInterop": true,
-    "strict": true,
-    "skipLibCheck": true,
+    "outDir": "./dist",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "declaration": true,
     "declarationMap": true,
-    "outDir": "./dist",
-    "noImplicitAny": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "rootDir": "./src",
+    "sourceMap": true,
+    "noEmit": false,
     "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "noEmit": false
+    "emitDeclarationOnly": true
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*"],
   "exclude": [
-    "src/**/*.test.ts",
-    "src/scenarios/**",
-    "src/polizy.storage.shared-tests.ts",
-    "dist",
     "node_modules",
-    "prisma/client-generated"
+    "dist",
+    "prisma/client-generated",
+    "**/*.test.ts",
+    "src/polizy.storage.shared-tests.ts"
   ]
 }
