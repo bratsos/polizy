@@ -1,4 +1,3 @@
-import type { PrismaClient } from "@prisma/client";
 import type { StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
@@ -10,6 +9,22 @@ import type {
   Subject,
   SubjectType,
 } from "./types";
+
+/**
+ * The minimal Prisma client surface this adapter uses. Defining it structurally
+ * — rather than importing `PrismaClient` from `@prisma/client` — keeps the
+ * library's type-check independent of whether the consumer has run
+ * `prisma generate`, and avoids coupling to a specific Prisma version. Any
+ * generated client that exposes a `polizyTuple` delegate satisfies this shape.
+ */
+type PrismaClientLike = {
+  $transaction(operations: any[]): Promise<any[]>;
+  polizyTuple: {
+    upsert(args: any): any;
+    deleteMany(args: { where: unknown }): Promise<{ count: number }>;
+    findMany(args: any): Promise<any[]>;
+  };
+};
 
 /**
  * Revive a condition read from a JSON column. JSON does not preserve `Date`, so
@@ -43,10 +58,8 @@ function mapPrismaTupleToStoredTuple<
 export function PrismaAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
->(
-  prisma: PrismaClient | ReturnType<PrismaClient["$extends"]>,
-): StorageAdapter<S, O> {
-  const p = prisma as PrismaClient;
+>(prisma: PrismaClientLike): StorageAdapter<S, O> {
+  const p = prisma;
 
   return {
     async write(tuples: InputTuple<S, O>[]): Promise<StoredTuple<S, O>[]> {
@@ -64,16 +77,15 @@ export function PrismaAdapter<
           };
           const condition =
             tuple.condition !== undefined ? { condition: tuple.condition } : {};
-          // The compound-unique `where` shape comes from the consumer's own
-          // generated Prisma client; @prisma/client's default types don't model
-          // this project's `@@unique`, so the argument is asserted here.
+          // The `where` targets the `@@unique([...])` compound key, whose
+          // generated name Prisma derives by joining the fields with `_`.
           return p.polizyTuple.upsert({
             where: {
               subjectType_subjectId_relation_objectType_objectId: key,
             },
             create: { ...key, ...condition },
             update: condition,
-          } as any);
+          });
         }),
       );
 
