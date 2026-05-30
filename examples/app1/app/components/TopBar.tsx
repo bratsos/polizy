@@ -19,13 +19,19 @@ export default function TopBar({ persona, users, region, tupleCount }: Props) {
   };
 
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
+    <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/70 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-3 px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden
+            className="grid h-6 w-6 place-items-center rounded-[7px] bg-indigo-600 text-[13px] font-bold text-white shadow-sm"
+          >
+            P
+          </span>
+          <h1 className="text-[15px] font-semibold tracking-tight text-zinc-900">
             PolizyDocs
           </h1>
-          <span className="hidden text-xs text-zinc-500 sm:inline">
+          <span className="hidden text-xs text-zinc-400 sm:inline">
             authorization, made visible
           </span>
         </div>
@@ -40,7 +46,7 @@ export default function TopBar({ persona, users, region, tupleCount }: Props) {
           </span>
           <nav
             aria-labelledby="persona-label"
-            className="flex items-center gap-1 rounded-lg bg-zinc-100 p-1"
+            className="flex items-center gap-0.5 rounded-lg bg-zinc-100 p-0.5 ring-1 ring-inset ring-zinc-200/60"
           >
             {users.map((u) => {
               const active = u.id === persona;
@@ -49,10 +55,10 @@ export default function TopBar({ persona, users, region, tupleCount }: Props) {
                   key={u.id}
                   to={withParam("as", u.id)}
                   aria-current={active ? "true" : undefined}
-                  className={`rounded-md px-2.5 py-1 text-sm capitalize transition-colors ${
+                  className={`rounded-[7px] px-2.5 py-1 text-[13px] capitalize transition-all ${
                     active
-                      ? "bg-indigo-600 font-medium text-white"
-                      : "text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
+                      ? "bg-white font-medium text-zinc-900 shadow-sm ring-1 ring-zinc-200"
+                      : "text-zinc-500 hover:text-zinc-900"
                   }`}
                 >
                   {u.name}

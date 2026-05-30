@@ -1,12 +1,104 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "Inter", "Inter var", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: "Geist Mono", "SF Mono", ui-monospace, "JetBrains Mono", "Menlo",
+    monospace;
+
+  /* Accent — Linear's indigo/violet. Overriding the `indigo-*` ramp means every
+     existing `indigo-…` utility in the app adopts the brand colour. */
+  --color-indigo-50: #eceefb;
+  --color-indigo-100: #dfe2f8;
+  --color-indigo-200: #c6ccf2;
+  --color-indigo-300: #a4ace8;
+  --color-indigo-400: #828cdd;
+  --color-indigo-500: #6d77d6;
+  --color-indigo-600: #5e6ad2;
+  --color-indigo-700: #4e58b6;
+  --color-indigo-800: #424a96;
+  --color-indigo-900: #393f7a;
+
+  /* Cooler, flatter neutrals than default zinc — closer to Linear's greys. */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f6;
+  --color-zinc-200: #e9e9ee;
+  --color-zinc-300: #d6d6de;
+  --color-zinc-400: #9a9aa6;
+  --color-zinc-500: #6f6f7b;
+  --color-zinc-600: #52525c;
+  --color-zinc-700: #3d3d45;
+  --color-zinc-800: #27272d;
+  --color-zinc-900: #161619;
+
+  --color-canvas: #fbfbfd;
 }
 
-html,
-body {
-  background-color: #fafafa;
-  color-scheme: light;
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    /* A whisper of depth at the top, the way Linear's surfaces glow. */
+    background-image: radial-gradient(
+      120% 80% at 50% -20%,
+      color-mix(in srgb, var(--color-indigo-600) 7%, transparent),
+      transparent 60%
+    );
+    background-attachment: fixed;
+    color: #18181b;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv01", "cv03", "ss01", "ss03";
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.014em;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-indigo-600) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-indigo-500);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+}
+
+/* Thin, quiet scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-zinc-300) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-zinc-300);
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-zinc-400);
+}
+
+/* Subtle entrance for panels (the inspector slide-over, popups). */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

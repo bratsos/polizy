@@ -44,13 +44,13 @@ export default function Inspector({
       <Link
         to={closeHref}
         aria-label="Close inspector"
-        className="fixed inset-0 z-20 hidden bg-zinc-900/20 sm:block"
+        className="fixed inset-0 z-20 hidden bg-zinc-900/10 backdrop-blur-[2px] sm:block"
       />
       <aside
         role="dialog"
         aria-modal="false"
         aria-labelledby="inspector-title"
-        className="fixed right-0 top-0 z-30 flex h-screen w-full flex-col border-l border-zinc-200 bg-white shadow-xl sm:w-[440px]"
+        className="fixed right-0 top-0 z-30 flex h-screen w-full flex-col border-l border-zinc-200/80 bg-white/95 shadow-[-10px_0_40px_rgba(16,16,24,0.07)] backdrop-blur-xl sm:w-[440px]"
       >
         <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
           <h2
@@ -115,7 +115,7 @@ export default function Inspector({
           {/* explain(): the granting path */}
           <Section title="Why — explain() trace">
             {inspect.via ? (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <div className="rounded-lg border border-zinc-200/70 bg-zinc-50 p-3">
                 <Trace node={inspect.via} />
               </div>
             ) : (
@@ -129,7 +129,7 @@ export default function Inspector({
 
           {/* checkMany(): users × actions */}
           <Section title="Permission matrix — checkMany()">
-            <div className="overflow-hidden rounded-lg border border-zinc-200">
+            <div className="overflow-hidden rounded-lg border border-zinc-200/70">
               <table className="w-full text-center text-xs">
                 <caption className="sr-only">
                   Permission matrix: which user can perform which action on this
@@ -228,7 +228,7 @@ function Section({
 
 function WhoBox({ label, users }: { label: string; users: string[] }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+    <div className="rounded-lg border border-zinc-200/70 bg-zinc-50 p-2">
       <p className="text-[11px] uppercase tracking-wide text-zinc-400">
         {label}
       </p>

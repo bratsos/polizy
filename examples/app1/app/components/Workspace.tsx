@@ -10,9 +10,9 @@ const ICON: Record<string, string> = {
 };
 
 const btn =
-  "inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 shadow-[0_1px_2px_rgba(16,16,24,0.04)] transition-colors hover:border-zinc-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40";
 const input =
-  "w-full rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:outline-none";
+  "w-full rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/15";
 
 type Props = {
   persona: string;
@@ -47,11 +47,13 @@ export default function Workspace({
     <Link
       to={href({ open: e.key, inspect: null, action: null })}
       title={e.accessible ? undefined : `No access to ${e.name} as ${persona}`}
-      className={`group flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors ${
-        nested ? "ml-4" : ""
-      } ${openKey === e.key ? "bg-indigo-50 text-indigo-700" : "hover:bg-zinc-100"} ${
-        e.accessible ? "text-zinc-800" : "text-zinc-400"
-      }`}
+      className={`group flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] transition-colors ${
+        nested ? "ml-3.5 border-l border-zinc-200 pl-3" : ""
+      } ${
+        openKey === e.key
+          ? "bg-zinc-100 font-medium text-zinc-900"
+          : "hover:bg-zinc-100/70"
+      } ${e.accessible ? "text-zinc-700" : "text-zinc-400"}`}
     >
       <span className="flex items-center gap-2 truncate">
         <span aria-hidden>{ICON[e.type]}</span>
@@ -67,7 +69,7 @@ export default function Workspace({
           {e.actions.slice(0, 3).map((a) => (
             <span
               key={a}
-              className="rounded bg-zinc-100 px-1 text-[10px] text-zinc-500"
+              className="rounded bg-zinc-100 px-1 text-[10px] font-medium text-zinc-500 ring-1 ring-inset ring-zinc-200/60"
             >
               {a}
             </span>
@@ -79,7 +81,7 @@ export default function Workspace({
 
   return (
     <>
-      <aside className="border-r border-zinc-200 bg-white p-3 lg:min-h-[calc(100vh-57px)]">
+      <aside className="border-r border-zinc-200/70 bg-white/55 p-3 backdrop-blur-sm lg:min-h-[calc(100vh-57px)]">
         <nav className="space-y-0.5">
           {folders.map((f) => (
             <div key={f.key}>
@@ -179,10 +181,10 @@ function ResourceView({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-xl font-semibold text-zinc-900">
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900">
           <span aria-hidden>{ICON[opened.type]}</span>
           {opened.name}
-          <span className="font-mono text-xs font-normal text-zinc-400">
+          <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] font-normal text-zinc-400">
             {opened.key}
           </span>
         </h2>
@@ -191,22 +193,22 @@ function ResourceView({
             inspect: opened.key,
             action: opened.type === "team" ? "manage_members" : "view",
           })}
-          className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-[13px] font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
         >
           🔍 Inspect access
         </Link>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
         {(
           ["view", "edit", "delete", "share", "manage_members"] as Action[]
         ).map((a) => (
           <span
             key={a}
-            className={`rounded px-1.5 py-0.5 text-[11px] ${
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
               allow(a)
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-zinc-100 text-zinc-400"
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                : "bg-zinc-50 text-zinc-400 ring-zinc-200/70"
             }`}
           >
             {allow(a) ? "✓" : "✗"} {a}
@@ -214,7 +216,7 @@ function ResourceView({
         ))}
       </div>
 
-      <div className="mt-5 rounded-lg border border-zinc-200 bg-white p-5">
+      <div className="mt-5 rounded-xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,16,24,0.04)] p-5">
         {opened.type === "document" ? (
           <DocumentBody
             persona={persona}
@@ -484,7 +486,7 @@ function ShareControls({
     </>
   );
   return (
-    <details className="w-full rounded-lg border border-zinc-200 bg-white p-3">
+    <details className="w-full rounded-xl border border-zinc-200/70 bg-white shadow-[0_1px_2px_rgba(16,16,24,0.04)] p-3">
       <summary className="cursor-pointer text-sm font-medium text-zinc-700">
         🔗 Share — every grant type
       </summary>
