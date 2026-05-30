@@ -23,11 +23,7 @@ export function InfoTip({
       <Tooltip.Portal>
         <Tooltip.Positioner sideOffset={6}>
           <Tooltip.Popup className="max-w-xs rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs leading-snug text-zinc-50 shadow-lg outline outline-1 outline-white/10 transition-[transform,opacity] data-[ending-style]:opacity-0 data-[starting-style]:opacity-0">
-            <Tooltip.Arrow className="data-[side=bottom]:top-[-6px] data-[side=top]:bottom-[-6px]">
-              <svg width="12" height="6" viewBox="0 0 12 6" aria-hidden>
-                <path d="M0 6 L6 0 L12 6 Z" className="fill-zinc-900" />
-              </svg>
-            </Tooltip.Arrow>
+            <Tooltip.Arrow className="-mt-px h-2 w-2 rotate-45 bg-zinc-900 data-[side=bottom]:-top-1 data-[side=top]:-bottom-1" />
             {label}
           </Tooltip.Popup>
         </Tooltip.Positioner>

@@ -13,7 +13,6 @@ import TopBar from "../components/TopBar";
 import { TooltipProvider } from "../components/ui/tooltip";
 import Workspace from "../components/Workspace";
 import {
-  authzFromSnapshot,
   type DocSchema,
   everyone,
   FIELD_CONTENT,
@@ -153,7 +152,7 @@ export async function clientLoader({ request }: ClientLoaderFunctionArgs) {
   // The whole authorization story runs right here in the browser: a real
   // Postgres (PGlite) in this visitor's IndexedDB, with the polizy engine on
   // top. Nothing is shared with anyone else.
-  const { db } = await getDb();
+  const { db, authz: engine } = await getDb();
 
   const url = new URL(request.url);
   const persona = USERS.includes(url.searchParams.get("as") ?? "")
@@ -185,227 +184,237 @@ export async function clientLoader({ request }: ClientLoaderFunctionArgs) {
       db.query<DbTuple>("SELECT * FROM polizy_tuple ORDER BY created_at, id"),
     ]);
 
-  // The page's read checks run against an in-memory snapshot of the tuples we
-  // just loaded (one PGlite read, then everything resolves in memory). PGlite
-  // remains the source of truth for writes. See authzFromSnapshot.
-  const authz = await authzFromSnapshot(tuplesRes.rows);
-
-  // Hierarchy edges (document -> folder) come straight from the `parent` tuples.
-  const parentOf = new Map<string, string>();
-  for (const t of tuplesRes.rows) {
-    if (t.relation === "parent") {
-      parentOf.set(
-        keyOf(t.subject_type, t.subject_id),
-        keyOf(t.object_type, t.object_id),
-      );
-    }
-  }
-
-  const raw: Array<{ type: ObjType; id: string; name: string }> = [
-    ...foldersRes.rows.map((f) => ({
-      type: "folder" as const,
-      id: f.id,
-      name: f.name,
-    })),
-    ...docsRes.rows.map((d) => ({
-      type: "document" as const,
-      id: d.id,
-      name: d.title,
-    })),
-    ...teamsRes.rows.map((t) => ({
-      type: "team" as const,
-      id: t.id,
-      name: t.name,
-    })),
-  ];
-
-  // For each resource, ask polizy which actions this persona can perform.
-  // `checkMany` answers all five in one call and correctly expands public
-  // (wildcard) grants — which is why we don't use `listAccessibleObjects` here.
-  const entities: Entity[] = await Promise.all(
-    raw.map(async (e): Promise<Entity> => {
-      const target = { type: e.type, id: e.id };
-      const results = await authz.checkMany(
-        ACTIONS.map((a) => ({ who, canThey: a, onWhat: target, context })),
-      );
-      const actions = ACTIONS.filter((_, i) => results[i]);
-      return {
-        key: keyOf(e.type, e.id),
-        type: e.type,
-        id: e.id,
-        name: e.name,
-        parentKey: parentOf.get(keyOf(e.type, e.id)),
-        actions,
-        accessible: actions.includes("view"),
-      };
-    }),
-  );
-
-  // --- opened resource detail ---
-  let opened: Opened | null = null;
-  if (openKey) {
-    const { type, id } = parseTarget(openKey);
-    const ent = entities.find((e) => e.key === openKey);
-    if (ent) {
-      const canView = await authz.check({
-        who,
-        canThey: "view",
-        onWhat: { type, id },
-        context,
-      });
-      const base: Opened = {
-        key: openKey,
-        type,
-        id,
-        name: ent.name,
-        actions: ent.actions,
-        canView,
-      };
-      if (type === "document") {
-        if (canView) {
-          const res = await db.query<{ content: string | null }>(
-            "SELECT content FROM documents WHERE id = $1",
-            [id],
+  // Run the whole page's read checks in ONE read scope: every check / checkMany
+  // / explain / listSubjects below shares a single reader, and `preload` loads
+  // the tuple set once so they all resolve in memory — no per-operation
+  // round-trips to PGlite. PGlite stays the source of truth for writes.
+  return engine.withReadScope(
+    async (authz) => {
+      // Hierarchy edges (document -> folder) come straight from the `parent` tuples.
+      const parentOf = new Map<string, string>();
+      for (const t of tuplesRes.rows) {
+        if (t.relation === "parent") {
+          parentOf.set(
+            keyOf(t.subject_type, t.subject_id),
+            keyOf(t.object_type, t.object_id),
           );
-          base.content = res.rows[0]?.content ?? null;
-        } else {
-          base.content = null;
         }
-        // Field-level: a doc may expose individual `#field` ids the persona can
-        // see even when the base document is locked (and vice-versa).
-        const fieldIds = Object.keys(FIELD_CONTENT).filter(
-          (fid) => baseId(fid) === id,
-        );
-        base.fields = await Promise.all(
-          fieldIds.map(async (fid): Promise<DocField> => {
-            const canViewField = await authz.check({
-              who,
-              canThey: "view",
-              onWhat: { type: "document", id: fid },
-              context,
+      }
+
+      const raw: Array<{ type: ObjType; id: string; name: string }> = [
+        ...foldersRes.rows.map((f) => ({
+          type: "folder" as const,
+          id: f.id,
+          name: f.name,
+        })),
+        ...docsRes.rows.map((d) => ({
+          type: "document" as const,
+          id: d.id,
+          name: d.title,
+        })),
+        ...teamsRes.rows.map((t) => ({
+          type: "team" as const,
+          id: t.id,
+          name: t.name,
+        })),
+      ];
+
+      // For each resource, ask polizy which actions this persona can perform.
+      // `checkMany` answers all five in one call and correctly expands public
+      // (wildcard) grants — which is why we don't use `listAccessibleObjects` here.
+      const entities: Entity[] = await Promise.all(
+        raw.map(async (e): Promise<Entity> => {
+          const target = { type: e.type, id: e.id };
+          const results = await authz.checkMany(
+            ACTIONS.map((a) => ({ who, canThey: a, onWhat: target, context })),
+          );
+          const actions = ACTIONS.filter((_, i) => results[i]);
+          return {
+            key: keyOf(e.type, e.id),
+            type: e.type,
+            id: e.id,
+            name: e.name,
+            parentKey: parentOf.get(keyOf(e.type, e.id)),
+            actions,
+            accessible: actions.includes("view"),
+          };
+        }),
+      );
+
+      // --- opened resource detail ---
+      let opened: Opened | null = null;
+      if (openKey) {
+        const { type, id } = parseTarget(openKey);
+        const ent = entities.find((e) => e.key === openKey);
+        if (ent) {
+          const canView = await authz.check({
+            who,
+            canThey: "view",
+            onWhat: { type, id },
+            context,
+          });
+          const base: Opened = {
+            key: openKey,
+            type,
+            id,
+            name: ent.name,
+            actions: ent.actions,
+            canView,
+          };
+          if (type === "document") {
+            if (canView) {
+              const res = await db.query<{ content: string | null }>(
+                "SELECT content FROM documents WHERE id = $1",
+                [id],
+              );
+              base.content = res.rows[0]?.content ?? null;
+            } else {
+              base.content = null;
+            }
+            // Field-level: a doc may expose individual `#field` ids the persona can
+            // see even when the base document is locked (and vice-versa).
+            const fieldIds = Object.keys(FIELD_CONTENT).filter(
+              (fid) => baseId(fid) === id,
+            );
+            base.fields = await Promise.all(
+              fieldIds.map(async (fid): Promise<DocField> => {
+                const canViewField = await authz.check({
+                  who,
+                  canThey: "view",
+                  onWhat: { type: "document", id: fid },
+                  context,
+                });
+                return {
+                  id: fid,
+                  field: fid.slice(id.length + 1),
+                  canView: canViewField,
+                  content: canViewField ? (FIELD_CONTENT[fid] ?? null) : null,
+                };
+              }),
+            );
+          } else if (type === "folder") {
+            base.children = entities
+              .filter((e) => e.parentKey === openKey)
+              .map((e) => ({
+                key: e.key,
+                type: e.type,
+                id: e.id,
+                name: e.name,
+              }));
+          } else {
+            const names = new Map(
+              usersRes.rows.map((u) => [u.id, u.name] as const),
+            );
+            base.members = tuplesRes.rows
+              .filter(
+                (t) =>
+                  t.relation === "member" &&
+                  t.object_type === "team" &&
+                  t.object_id === id,
+              )
+              .map((t) => ({
+                id: t.subject_id,
+                name: names.get(t.subject_id) ?? t.subject_id,
+              }));
+          }
+          opened = base;
+        }
+      }
+
+      // --- inspector ---
+      let inspect: Inspect | null = null;
+      if (inspectKey) {
+        const { type, id } = parseTarget(inspectKey);
+        const ent = entities.find((e) => e.key === inspectKey);
+        const target = { type, id };
+
+        // explain(): the path that grants (or null when denied).
+        const explained = await authz.explain({
+          who,
+          canThey: inspectAction,
+          onWhat: target,
+          context,
+        });
+
+        // checkMany(): a users × actions matrix for this resource.
+        const matrix = await Promise.all(
+          USERS.map(async (u) => {
+            const results = await authz.checkMany(
+              ACTIONS.map((a) => ({
+                who: { type: "user" as const, id: u },
+                canThey: a,
+                onWhat: target,
+                context,
+              })),
+            );
+            const actions: Record<string, boolean> = {};
+            ACTIONS.forEach((a, i) => {
+              actions[a] = results[i] ?? false;
             });
-            return {
-              id: fid,
-              field: fid.slice(id.length + 1),
-              canView: canViewField,
-              content: canViewField ? (FIELD_CONTENT[fid] ?? null) : null,
-            };
+            return { user: u, actions };
           }),
         );
-      } else if (type === "folder") {
-        base.children = entities
-          .filter((e) => e.parentKey === openKey)
-          .map((e) => ({ key: e.key, type: e.type, id: e.id, name: e.name }));
-      } else {
-        const names = new Map(
-          usersRes.rows.map((u) => [u.id, u.name] as const),
-        );
-        base.members = tuplesRes.rows
+
+        // listSubjects(): the reverse question — who can view / edit this?
+        const [whoCanView, whoCanEdit] = await Promise.all([
+          authz.listSubjects({
+            onWhat: target,
+            canThey: "view",
+            ofType: "user",
+            context,
+          }),
+          authz.listSubjects({
+            onWhat: target,
+            canThey: "edit",
+            ofType: "user",
+            context,
+          }),
+        ]);
+
+        // Tuples on this object, its field-base, and its hierarchy ancestors.
+        const relevant = new Set<string>([
+          keyOf(type, id),
+          keyOf(type, baseId(id)),
+        ]);
+        let ancestor =
+          parentOf.get(keyOf(type, baseId(id))) ??
+          parentOf.get(keyOf(type, id));
+        while (ancestor) {
+          relevant.add(ancestor);
+          ancestor = parentOf.get(ancestor);
+        }
+        const tuples = tuplesRes.rows
           .filter(
             (t) =>
-              t.relation === "member" &&
-              t.object_type === "team" &&
-              t.object_id === id,
+              relevant.has(keyOf(t.object_type, t.object_id)) ||
+              (t.subject_type === type && t.subject_id === baseId(id)),
           )
-          .map((t) => ({
-            id: t.subject_id,
-            name: names.get(t.subject_id) ?? t.subject_id,
-          }));
+          .map(rowToTuple);
+
+        inspect = {
+          action: inspectAction,
+          target: { type, id, name: ent?.name ?? id },
+          allowed: explained.allowed,
+          via: explained.via,
+          matrix,
+          whoCanView: whoCanView.map((s) => s.id),
+          whoCanEdit: whoCanEdit.map((s) => s.id),
+          tuples,
+        };
       }
-      opened = base;
-    }
-  }
 
-  // --- inspector ---
-  let inspect: Inspect | null = null;
-  if (inspectKey) {
-    const { type, id } = parseTarget(inspectKey);
-    const ent = entities.find((e) => e.key === inspectKey);
-    const target = { type, id };
-
-    // explain(): the path that grants (or null when denied).
-    const explained = await authz.explain({
-      who,
-      canThey: inspectAction,
-      onWhat: target,
-      context,
-    });
-
-    // checkMany(): a users × actions matrix for this resource.
-    const matrix = await Promise.all(
-      USERS.map(async (u) => {
-        const results = await authz.checkMany(
-          ACTIONS.map((a) => ({
-            who: { type: "user" as const, id: u },
-            canThey: a,
-            onWhat: target,
-            context,
-          })),
-        );
-        const actions: Record<string, boolean> = {};
-        ACTIONS.forEach((a, i) => {
-          actions[a] = results[i] ?? false;
-        });
-        return { user: u, actions };
-      }),
-    );
-
-    // listSubjects(): the reverse question — who can view / edit this?
-    const [whoCanView, whoCanEdit] = await Promise.all([
-      authz.listSubjects({
-        onWhat: target,
-        canThey: "view",
-        ofType: "user",
-        context,
-      }),
-      authz.listSubjects({
-        onWhat: target,
-        canThey: "edit",
-        ofType: "user",
-        context,
-      }),
-    ]);
-
-    // Tuples on this object, its field-base, and its hierarchy ancestors.
-    const relevant = new Set<string>([
-      keyOf(type, id),
-      keyOf(type, baseId(id)),
-    ]);
-    let ancestor =
-      parentOf.get(keyOf(type, baseId(id))) ?? parentOf.get(keyOf(type, id));
-    while (ancestor) {
-      relevant.add(ancestor);
-      ancestor = parentOf.get(ancestor);
-    }
-    const tuples = tuplesRes.rows
-      .filter(
-        (t) =>
-          relevant.has(keyOf(t.object_type, t.object_id)) ||
-          (t.subject_type === type && t.subject_id === baseId(id)),
-      )
-      .map(rowToTuple);
-
-    inspect = {
-      action: inspectAction,
-      target: { type, id, name: ent?.name ?? id },
-      allowed: explained.allowed,
-      via: explained.via,
-      matrix,
-      whoCanView: whoCanView.map((s) => s.id),
-      whoCanEdit: whoCanEdit.map((s) => s.id),
-      tuples,
-    };
-  }
-
-  return data<HomeLoaderData>({
-    persona,
-    users: usersRes.rows,
-    region,
-    entities,
-    opened,
-    inspect,
-    allTuples: tuplesRes.rows.map(rowToTuple),
-  });
+      return data<HomeLoaderData>({
+        persona,
+        users: usersRes.rows,
+        region,
+        entities,
+        opened,
+        inspect,
+        allTuples: tuplesRes.rows.map(rowToTuple),
+      });
+    },
+    { preload: true },
+  );
 }
 
 export async function clientAction({ request }: ClientActionFunctionArgs) {

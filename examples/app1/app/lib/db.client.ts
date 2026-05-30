@@ -1,15 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
-import {
-  AuthSystem,
-  defineSchema,
-  everyone,
-  InMemoryStorageAdapter,
-} from "polizy";
-import {
-  createPGliteAdapter,
-  POLIZY_TUPLE_DDL,
-  reviveCondition,
-} from "./pglite-adapter";
+import { AuthSystem, defineSchema, everyone } from "polizy";
+import { createPGliteAdapter, POLIZY_TUPLE_DDL } from "./pglite-adapter";
 
 /**
  * THE AUTHORIZATION MODEL
@@ -88,52 +79,6 @@ export function makeAuthz(db: PGlite) {
 }
 
 export type Authz = ReturnType<typeof makeAuthz>;
-
-type TupleRow = {
-  subject_type: string;
-  subject_id: string;
-  relation: string;
-  object_type: string;
-  object_id: string;
-  condition: unknown;
-};
-
-/**
- * Evaluate a page's read checks against an in-memory copy of the tuples — a
- * request-scoped read cache.
- *
- * The polizy engine batches its reads (one broadened range read per
- * subject/object/relation, reused within an operation), so reading straight
- * from `getDb().authz` works. But this demo's PGlite lives in WASM + IndexedDB,
- * where every query is a ~20ms round-trip, and a single page render runs many
- * operations (one `checkMany` per resource, the inspector matrix, …) — dozens of
- * round-trips, ~1s. The whole tuple set is tiny, so we load it ONCE and run all
- * read checks against an in-memory adapter (microseconds). PGlite stays the
- * source of truth; *writes* still go through `getDb().authz`, and the next load
- * re-reads the result. (A server-backed app over a real Postgres wouldn't need
- * this — there a round-trip is cheap and you'd read directly.)
- */
-export async function authzFromSnapshot(rows: TupleRow[]): Promise<Authz> {
-  const mem = new InMemoryStorageAdapter<
-    "user" | "team",
-    "document" | "folder" | "team"
-  >();
-  await mem.write(
-    rows.map((r) => {
-      const condition = reviveCondition(r.condition);
-      return {
-        subject: { type: r.subject_type as "user" | "team", id: r.subject_id },
-        relation: r.relation,
-        object: {
-          type: r.object_type as "document" | "folder" | "team",
-          id: r.object_id,
-        },
-        ...(condition ? { condition } : {}),
-      };
-    }),
-  );
-  return new AuthSystem({ schema: docSchema, storage: mem });
-}
 
 const DOCUMENTS = [
   {
