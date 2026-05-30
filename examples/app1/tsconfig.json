@@ -1,15 +1,19 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": [
-    "app/**/.server/**/*",
-    "app/**/.client/**/*",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    ".react-router/types/**/*",
     "./public/symbiosis-assets/types.d.ts"
   ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "target": "ES2022",
     "jsx": "react-jsx",
-    "module": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node", "vite/client"],
+    "rootDirs": [".", "./.react-router/types"],
     "paths": {
       "~/*": ["./app/*"]
     },
@@ -17,6 +21,7 @@
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "strict": true
+    "strict": true,
+    "noEmit": true
   }
 }
