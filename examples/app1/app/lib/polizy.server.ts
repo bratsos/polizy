@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client-generated";
-import { AuthSystem, defineSchema, PrismaAdapter } from "polizy";
+import { AuthSystem, defineSchema } from "polizy";
+import { PrismaStorageAdapter } from "polizy/prisma-storage";
 
 const prisma = new PrismaClient();
 
@@ -32,9 +33,10 @@ const docSchema = defineSchema({
 
 export type DocSchema = typeof docSchema;
 
-const storage = PrismaAdapter<"user" | "team", "document" | "folder" | "team">(
-  prisma as any,
-);
+const storage = PrismaStorageAdapter<
+  "user" | "team",
+  "document" | "folder" | "team"
+>(prisma as any);
 
 const authz = new AuthSystem({ schema: docSchema, storage });
 

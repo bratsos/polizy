@@ -46,15 +46,41 @@ export class InMemoryStorageAdapter<
     return true;
   }
 
+  private findExisting(
+    inputTuple: InputTuple<S, O>,
+  ): StoredTuple<S, O> | undefined {
+    for (const tuple of this.tuples.values()) {
+      if (
+        deepEqual(tuple.subject, inputTuple.subject) &&
+        tuple.relation === inputTuple.relation &&
+        deepEqual(tuple.object, inputTuple.object)
+      ) {
+        return tuple;
+      }
+    }
+    return undefined;
+  }
+
   async write(tuples: InputTuple<S, O>[]) {
-    const created: StoredTuple<S, O>[] = [];
+    const result: StoredTuple<S, O>[] = [];
     for (const inputTuple of tuples) {
+      const existing = this.findExisting(inputTuple);
+      if (existing) {
+        // Idempotent: re-writing only updates the condition when one is
+        // provided, so re-granting without a `when` preserves any existing
+        // condition (matches the Prisma adapter). Revoke to clear it.
+        if (inputTuple.condition !== undefined) {
+          existing.condition = inputTuple.condition;
+        }
+        result.push(existing);
+        continue;
+      }
       const id = this.generateId();
       const newTuple: StoredTuple<S, O> = { ...inputTuple, id };
       this.tuples.set(id, newTuple);
-      created.push(newTuple);
+      result.push(newTuple);
     }
-    return created;
+    return result;
   }
 
   async delete(filter: {
@@ -102,7 +128,10 @@ export class InMemoryStorageAdapter<
     return deleteCount;
   }
 
-  async findTuples(filter: Partial<InputTuple<S, O>>) {
+  async findTuples(
+    filter: Partial<InputTuple<S, O>>,
+    options?: { limit?: number; offset?: number },
+  ) {
     const results: StoredTuple<S, O>[] = [];
 
     const adaptedFilter = {
@@ -118,7 +147,10 @@ export class InMemoryStorageAdapter<
         results.push(tuple);
       }
     }
-    return results;
+
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? Number.POSITIVE_INFINITY;
+    return results.slice(offset, offset + limit);
   }
 
   async findSubjects(

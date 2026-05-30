@@ -1,12 +1,7 @@
+import { SchemaError } from "./errors.ts";
+
 export type SubjectType = string;
 export type ObjectType = string;
-
-/**
- * Logger interface for Polizy. Allows custom logging handlers.
- */
-export interface Logger {
-  warn: (message: string) => void;
-}
 
 export type Subject<T extends SubjectType = SubjectType> = {
   type: T;
@@ -17,10 +12,66 @@ export type AnyObject<T extends ObjectType = ObjectType> = {
   id: string;
 };
 
+/** Reserved subject id representing "everyone" (a public/wildcard grant). */
+export const PUBLIC_ID = "*";
+
+/**
+ * Build a wildcard subject of the given type. A grant to `everyone("user")`
+ * authorizes every `user` subject.
+ *
+ * @example authz.allow({ who: everyone("user"), toBe: "viewer", onWhat: doc })
+ */
+export const everyone = <T extends SubjectType>(type: T): Subject<T> => ({
+  type,
+  id: PUBLIC_ID,
+});
+
+/** Pluggable logger. Defaults to a no-op inside AuthSystem. */
+export interface Logger {
+  warn(message: string, meta?: unknown): void;
+  error(message: string, meta?: unknown): void;
+  debug?(message: string, meta?: unknown): void;
+}
+
 export type Relation = string;
 export type Action = string;
-export type Condition = { validSince?: Date; validUntil?: Date };
 export type TupleId = string;
+
+/** A JSON scalar usable as an attribute-predicate operand. */
+export type JsonScalar = string | number | boolean | null;
+
+/** Comparison operators supported by attribute predicates. */
+export type AttributeOperator =
+  | "eq"
+  | "ne"
+  | "in"
+  | "nin"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte";
+
+/**
+ * An attribute-based predicate evaluated against the `context` passed to
+ * `check()`. `attribute` is a dot-path into the context object.
+ */
+export type AttributePredicate = {
+  attribute: string;
+  operator: AttributeOperator;
+  value: JsonScalar | JsonScalar[];
+};
+
+/**
+ * Constraints attached to a tuple. A tuple only grants access while its
+ * condition is valid: within the optional time window AND with every attribute
+ * predicate satisfied by the check-time context. Evaluation is fail-closed.
+ */
+export type Condition = {
+  validSince?: Date;
+  validUntil?: Date;
+  /** All predicates must pass (logical AND). */
+  attributes?: AttributePredicate[];
+};
 
 export type TupleSubject<S extends SubjectType, O extends ObjectType> =
   | Subject<S>
@@ -67,6 +118,15 @@ export interface AuthSchema<
   relations: Relations;
   actionToRelations: ActionRelations;
   hierarchyPropagation?: HierarchyProp;
+
+  /**
+   * Object types that use field-level identifiers (id contains `fieldSeparator`,
+   * e.g. `doc1#title`). Only these types inherit access from their base object.
+   * Omit to disable field-level identifiers entirely (secure default).
+   */
+  fieldLevelObjects?: ReadonlyArray<ValidObjectTypes>;
+  /** Separator between base id and field for `fieldLevelObjects`. Default `"#"`. */
+  fieldSeparator?: string;
 
   _subjectType?: ValidSubjectTypes;
   _objectType?: ValidObjectTypes;
@@ -123,6 +183,9 @@ export function defineSchema<
   actionToRelations: ActionRelations;
   hierarchyPropagation?: HierarchyProp;
 
+  fieldLevelObjects?: ReadonlyArray<ObjT>;
+  fieldSeparator?: string;
+
   subjectTypes?: ReadonlyArray<SubT>;
   objectTypes?: ReadonlyArray<ObjT>;
 }): AuthSchema<Relations, ActionRelations, HierarchyProp, SubT, ObjT> {
@@ -131,10 +194,10 @@ export function defineSchema<
     if (relationsForAction) {
       for (const relation of relationsForAction) {
         if (!(relation in schema.relations)) {
-          console.warn(
-            `Schema Warning: Action '${String(
-              action,
-            )}' references undefined relation '${String(relation)}'.`,
+          throw new SchemaError(
+            `Action '${String(action)}' references undefined relation '${String(
+              relation,
+            )}'.`,
           );
         }
       }
@@ -143,8 +206,8 @@ export function defineSchema<
   if (schema.hierarchyPropagation) {
     for (const childAction in schema.hierarchyPropagation) {
       if (!(childAction in schema.actionToRelations)) {
-        console.warn(
-          `Schema Warning: hierarchyPropagation references undefined child action '${String(
+        throw new SchemaError(
+          `hierarchyPropagation references undefined child action '${String(
             childAction,
           )}'.`,
         );
@@ -153,8 +216,8 @@ export function defineSchema<
       if (parentActions) {
         for (const parentAction of parentActions) {
           if (!(parentAction in schema.actionToRelations)) {
-            console.warn(
-              `Schema Warning: hierarchyPropagation for '${String(
+            throw new SchemaError(
+              `hierarchyPropagation for '${String(
                 childAction,
               )}' references undefined parent action '${String(parentAction)}'.`,
             );
@@ -205,3 +268,22 @@ export interface ListAccessibleObjectsResult<
 > {
   accessible: Array<AccessibleObject<Schema>>;
 }
+
+/**
+ * A node in an authorization explanation tree — the path by which access was
+ * granted. Produced by `explain()`.
+ */
+export type ExplainNode =
+  | { kind: "direct"; relation: string }
+  | { kind: "wildcard"; relation: string }
+  | { kind: "field"; base: AnyObject; via: ExplainNode }
+  | { kind: "group"; relation: string; through: AnyObject; via: ExplainNode }
+  | {
+      kind: "hierarchy";
+      relation: string;
+      parent: AnyObject;
+      via: ExplainNode;
+    };
+
+/** Result of `explain()`: the decision plus the granting path (null when denied). */
+export type ExplainResult = { allowed: boolean; via: ExplainNode | null };

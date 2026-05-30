@@ -1,19 +1,29 @@
+import { isConditionValid } from "./conditions.ts";
 import {
   ConfigurationError,
   MaxDepthExceededError,
+  NotAuthorizedError,
   SchemaError,
 } from "./errors.ts";
 import type { StorageAdapter } from "./polizy.storage.ts";
+import {
+  fieldSeparator,
+  groupRelations,
+  hierarchyRelations,
+  isFieldType,
+  resolveRelation,
+} from "./schema.ts";
 import type {
   AccessibleObject,
   AnyObject,
   AuthSchema,
   Condition,
+  ExplainNode,
+  ExplainResult,
   InputTuple,
   ListAccessibleObjectsArgs,
   ListAccessibleObjectsResult,
   Logger,
-  RelationDefinition,
   SchemaObjectTypes,
   SchemaSubjectTypes,
   StoredTuple,
@@ -22,20 +32,36 @@ import type {
   TypedAction,
   TypedObject,
   TypedRelation,
+  TypedSubject,
 } from "./types.ts";
+import { PUBLIC_ID } from "./types.ts";
 
-const defaultLogger: Logger = {
-  warn: (msg: string) => console.warn(msg),
-};
+const noopLogger: Logger = { warn: () => {}, error: () => {} };
 
-const createCacheKey = (
-  s: Subject<any> | AnyObject<any>,
+const cacheKey = (
+  s: { type: string; id: string },
   r: string,
-  o: AnyObject<any>,
+  o: { type: string; id: string },
 ): string => `${s.type}:${s.id}|${r}|${o.type}:${o.id}`;
 
-const createObjectIdentifierString = (obj: TypedObject<any>): string =>
-  `${obj.type}:${obj.id}`;
+const objKey = (o: { type: string; id: string }): string => `${o.type}:${o.id}`;
+
+/** Internal per-`check` traversal state. */
+type ResolveState = {
+  depth: number;
+  /** Cycle guard: keys currently on the recursion stack. */
+  visited: Set<string>;
+  /** Memo of fully-resolved, cycle-independent results for this check. */
+  resolved: Map<string, boolean>;
+};
+
+/**
+ * Result of one resolution step.
+ * `stable` is false when the result was influenced by a cycle cutoff or a depth
+ * cutoff, meaning it is only valid in the current stack context and must NOT be
+ * memoized globally.
+ */
+type ResolveOutcome = { value: boolean; stable: boolean };
 
 export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   private readonly storage: StorageAdapter<
@@ -44,17 +70,20 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   >;
   private readonly schema: S;
   private readonly defaultCheckDepth: number;
-  private readonly fieldSeparator: string;
+  private readonly maxDepthBehavior: "throw" | "deny";
   private readonly logger: Logger;
-  private readonly throwOnMaxDepth: boolean;
+  private readonly fieldSep: string;
+  private readonly groupRels: string[];
+  private readonly hierRels: string[];
 
   constructor(config: {
     storage: StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>;
     schema: S;
     defaultCheckDepth?: number;
-    fieldSeparator?: string;
+    maxDepthBehavior?: "throw" | "deny";
     logger?: Logger;
-    throwOnMaxDepth?: boolean;
+    /** Overrides the schema's field separator (defaults to the schema's, then "#"). */
+    fieldSeparator?: string;
   }) {
     if (!config.storage)
       throw new ConfigurationError("Storage adapter is required.");
@@ -63,530 +92,136 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
 
     this.storage = config.storage;
     this.schema = config.schema;
-    this.defaultCheckDepth = config.defaultCheckDepth ?? 10;
-    this.fieldSeparator = config.fieldSeparator ?? "#";
-    this.logger = config.logger ?? defaultLogger;
-    this.throwOnMaxDepth = config.throwOnMaxDepth ?? false;
+    this.defaultCheckDepth = config.defaultCheckDepth ?? 20;
+    this.maxDepthBehavior = config.maxDepthBehavior ?? "throw";
+    this.logger = config.logger ?? noopLogger;
+    this.fieldSep = config.fieldSeparator ?? fieldSeparator(this.schema);
+    this.groupRels = groupRelations(this.schema);
+    this.hierRels = hierarchyRelations(this.schema);
   }
 
-  /**
-   * Write a permission tuple directly to storage.
-   *
-   * This is a low-level method for creating relationship tuples. For common
-   * operations, prefer using higher-level methods like `allow()`, `addMember()`,
-   * or `setParent()`.
-   *
-   * @param tuple - The tuple to write
-   * @param tuple.subject - The subject of the relationship
-   * @param tuple.relation - The relation type (must be defined in schema)
-   * @param tuple.object - The object of the relationship
-   * @param tuple.condition - Optional time-based validity conditions
-   * @returns Promise resolving to the stored tuple with generated ID
-   * @throws {SchemaError} If the relation is not defined in the schema
-   *
-   * @example
-   * const tuple = await authz.writeTuple({
-   *   subject: { type: "user", id: "alice" },
-   *   relation: "viewer",
-   *   object: { type: "document", id: "doc123" }
-   * });
-   */
-  async writeTuple(
-    tuple: Omit<
-      InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
-      "id"
-    > & {
-      relation: TypedRelation<S>;
-    },
-  ): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
-    if (!this.schema.relations[tuple.relation]) {
-      throw new SchemaError(
-        `Relation '${String(tuple.relation)}' is not defined in the schema.`,
-      );
-    }
-    const results = await this.storage.write([
-      tuple as InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
-    ]);
-    if (!results || results.length === 0 || !results[0]) {
-      throw new Error("Storage adapter failed to return the written tuple.");
-    }
+  // ---------------------------------------------------------------------------
+  // Reads
+  // ---------------------------------------------------------------------------
 
-    return results[0] as StoredTuple<
-      SchemaSubjectTypes<S>,
-      SchemaObjectTypes<S>
-    >;
-  }
-
-  /**
-   * Internal helper to delete tuples using the storage adapter based on filter criteria.
-   * Ensures that an empty filter is not passed to the storage adapter.
-   * @param filter An object containing optional 'who', 'was', and 'onWhat' criteria.
-   * @returns A promise resolving to the number of tuples deleted.
-   * @private
-   */
-  private async deleteTuple(filter: {
-    who?: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    was?: TypedRelation<S>;
-    onWhat?: AnyObject<SchemaObjectTypes<S>>;
-  }): Promise<number> {
-    if (!filter.who && !filter.was && !filter.onWhat) {
-      this.logger.warn(
-        "deleteTuple called with an empty filter. No tuples were deleted.",
-      );
-
-      return 0;
-    }
-
-    return this.storage.delete({
-      ...filter,
-      was: filter.was as string | undefined,
-    });
-  }
-
-  /**
-   * Check if a subject can perform an action on an object.
-   *
-   * Evaluates direct permissions, group memberships, and hierarchy propagation
-   * to determine if access should be granted.
-   *
-   * @param request - The authorization check request
-   * @param request.who - The subject (user or entity) requesting access
-   * @param request.canThey - The action being requested (e.g., "view", "edit")
-   * @param request.onWhat - The object being accessed
-   * @param request.context - Optional context for the check
-   * @returns Promise resolving to true if access is granted, false otherwise
-   * @throws {MaxDepthExceededError} If throwOnMaxDepth is enabled and depth limit exceeded
-   *
-   * @example
-   * const canView = await authz.check({
-   *   who: { type: "user", id: "alice" },
-   *   canThey: "view",
-   *   onWhat: { type: "document", id: "doc123" }
-   * });
-   */
   async check(request: {
     who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
     canThey: TypedAction<S>;
     onWhat: AnyObject<SchemaObjectTypes<S>>;
-    context?: Record<string, any>;
-    _internalParams?: {
-      depth: number;
-      visited: Set<string>;
-    };
+    context?: Record<string, unknown>;
   }): Promise<boolean> {
-    const { who, canThey, onWhat, context } = request;
-    const depth = request._internalParams?.depth ?? 0;
-    const visited = request._internalParams?.visited ?? new Set<string>();
+    const state: ResolveState = {
+      depth: 0,
+      visited: new Set(),
+      resolved: new Map(),
+    };
+    const outcome = await this.resolveAccess(
+      request.who,
+      request.canThey,
+      request.onWhat,
+      request.context,
+      state,
+    );
+    return outcome.value;
+  }
 
-    const cacheKey = createCacheKey(who, canThey as string, onWhat);
-    if (visited.has(cacheKey)) {
-      return false;
+  /** Like {@link check}, but throws {@link NotAuthorizedError} when denied. */
+  async checkOrThrow(request: {
+    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    canThey: TypedAction<S>;
+    onWhat: AnyObject<SchemaObjectTypes<S>>;
+    context?: Record<string, unknown>;
+  }): Promise<void> {
+    const allowed = await this.check(request);
+    if (!allowed) {
+      throw new NotAuthorizedError(
+        request.who,
+        request.canThey as string,
+        request.onWhat,
+      );
     }
-    if (depth > this.defaultCheckDepth) {
-      const message = `Authorization check exceeded maximum depth (${this.defaultCheckDepth}) for ${who.type}:${who.id} ${String(canThey)} ${onWhat.type}:${onWhat.id}`;
+  }
 
-      if (this.throwOnMaxDepth) {
-        throw new MaxDepthExceededError(
-          message,
-          { type: who.type, id: who.id },
-          String(canThey),
-          { type: onWhat.type, id: onWhat.id },
-          depth,
+  /**
+   * Answer several authorization questions at once. Each question is resolved
+   * with its own memo (questions may carry different `context`), but every
+   * question still benefits from within-question memoization.
+   */
+  async checkMany(
+    requests: Array<{
+      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      context?: Record<string, unknown>;
+    }>,
+  ): Promise<boolean[]> {
+    return Promise.all(requests.map((r) => this.check(r)));
+  }
+
+  /** Explain why a check is allowed or denied, returning the granting path. */
+  async explain(request: {
+    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    canThey: TypedAction<S>;
+    onWhat: AnyObject<SchemaObjectTypes<S>>;
+    context?: Record<string, unknown>;
+  }): Promise<ExplainResult> {
+    const via = await this.explainAccess(
+      request.who,
+      request.canThey,
+      request.onWhat,
+      request.context,
+      0,
+      new Set(),
+    );
+    return { allowed: via !== null, via };
+  }
+
+  /**
+   * Reverse expansion: list the subjects that can perform `canThey` on `onWhat`.
+   * Candidates are gathered from direct holders, group members (transitively),
+   * and the object's hierarchy ancestors, then each is confirmed with `check`.
+   */
+  async listSubjects(args: {
+    canThey: TypedAction<S>;
+    onWhat: AnyObject<SchemaObjectTypes<S>>;
+    ofType?: SchemaSubjectTypes<S>;
+    context?: Record<string, unknown>;
+  }): Promise<Subject<SchemaSubjectTypes<S>>[]> {
+    const { canThey, onWhat, ofType, context } = args;
+    const candidates = new Map<string, Subject<SchemaSubjectTypes<S>>>();
+    const addCandidate = (s: { type: string; id: string }) => {
+      candidates.set(objKey(s), s as Subject<SchemaSubjectTypes<S>>);
+    };
+
+    // Objects whose grantees could reach onWhat: onWhat, its base, its ancestors.
+    const objectsToInspect = await this.ancestorsOf(onWhat, context);
+
+    for (const obj of objectsToInspect) {
+      const holders = await this.storage.findTuples({
+        object: obj as AnyObject<SchemaObjectTypes<S>>,
+      });
+      for (const tuple of holders) {
+        addCandidate(tuple.subject);
+        await this.collectGroupMembers(
+          tuple.subject,
+          addCandidate,
+          new Set(),
+          0,
         );
       }
-
-      this.logger.warn(message);
-      return false;
     }
 
-    visited.add(cacheKey);
-
-    const requiredRelations = this.schema.actionToRelations[canThey];
-    if (!requiredRelations || requiredRelations.length === 0) {
-      visited.delete(cacheKey);
-      return false;
-    }
-
-    const targetObjectIdentifiers = this.getTargetObjectIdentifiers(onWhat);
-
-    for (const targetObj of targetObjectIdentifiers) {
-      for (const relation of requiredRelations) {
-        const potentialTuples = await this.storage.findTuples({
-          subject: who as TupleSubject<
-            SchemaSubjectTypes<S>,
-            SchemaObjectTypes<S>
-          >,
-          relation: relation as string,
-          object: targetObj as AnyObject<SchemaObjectTypes<S>>,
-        });
-        for (const tuple of potentialTuples) {
-          if (this.isConditionValid(tuple.condition)) {
-            visited.delete(cacheKey);
-            return true;
-          }
-        }
+    const confirmed: Subject<SchemaSubjectTypes<S>>[] = [];
+    for (const candidate of candidates.values()) {
+      if (ofType && candidate.type !== ofType) continue;
+      if (await this.check({ who: candidate, canThey, onWhat, context })) {
+        confirmed.push(candidate);
       }
     }
-
-    const groupRelations = Object.entries(this.schema.relations)
-      .filter(([, def]) => (def as RelationDefinition).type === "group")
-      .map(([name]) => name as TypedRelation<S>);
-
-    if (groupRelations.length > 0) {
-      for (const groupRelation of groupRelations) {
-        const membershipTuples = await this.storage.findTuples({
-          subject: who as TupleSubject<
-            SchemaSubjectTypes<S>,
-            SchemaObjectTypes<S>
-          >,
-          relation: groupRelation as string,
-        });
-
-        for (const membershipTuple of membershipTuples) {
-          if (!this.isConditionValid(membershipTuple.condition)) {
-            continue;
-          }
-
-          const groupSubject: AnyObject<SchemaObjectTypes<S>> =
-            membershipTuple.object as AnyObject<SchemaObjectTypes<S>>;
-
-          const groupHasAccess = await this.check({
-            who: groupSubject,
-            canThey,
-            onWhat,
-            context,
-            _internalParams: { depth: depth + 1, visited },
-          });
-
-          if (groupHasAccess) {
-            visited.delete(cacheKey);
-            return true;
-          }
-        }
-      }
-    }
-
-    const hierarchyRelation = this.findHierarchyRelation();
-    if (hierarchyRelation) {
-      const parentLinkTuples = await this.storage.findTuples({
-        subject: onWhat as TupleSubject<
-          SchemaSubjectTypes<S>,
-          SchemaObjectTypes<S>
-        >,
-        relation: hierarchyRelation as string,
-      });
-
-      for (const parentLinkTuple of parentLinkTuples) {
-        if (!this.isConditionValid(parentLinkTuple.condition)) {
-          continue;
-        }
-        const parentObject: AnyObject<SchemaObjectTypes<S>> =
-          parentLinkTuple.object as AnyObject<SchemaObjectTypes<S>>;
-        const requiredParentActions =
-          this.schema.hierarchyPropagation?.[canThey];
-
-        if (requiredParentActions) {
-          for (const parentAction of requiredParentActions) {
-            const subjectHasRequiredParentAccess = await this.check({
-              who,
-              canThey: parentAction,
-              onWhat: parentObject,
-              context,
-              _internalParams: { depth: depth + 1, visited },
-            });
-
-            if (subjectHasRequiredParentAccess) {
-              visited.delete(cacheKey);
-              return true;
-            }
-          }
-        }
-      }
-    }
-
-    visited.delete(cacheKey);
-    return false;
+    confirmed.sort((a, b) => objKey(a).localeCompare(objKey(b)));
+    return confirmed;
   }
 
-  private getTargetObjectIdentifiers(
-    object: AnyObject<SchemaObjectTypes<S>>,
-  ): AnyObject<SchemaObjectTypes<S>>[] {
-    const ids: AnyObject<SchemaObjectTypes<S>>[] = [object];
-    const fieldSepIndex = object.id.lastIndexOf(this.fieldSeparator);
-    if (fieldSepIndex > -1) {
-      ids.push({
-        type: object.type,
-        id: object.id.substring(0, fieldSepIndex),
-      });
-    }
-    return ids;
-  }
-
-  private isConditionValid(condition?: Condition): boolean {
-    if (!condition) return true;
-    const now = Date.now();
-    if (condition.validSince && condition.validSince.getTime() > now)
-      return false;
-    if (condition.validUntil && condition.validUntil.getTime() <= now)
-      return false;
-    return true;
-  }
-
-  /**
-   * Grant a permission by creating a relationship tuple.
-   *
-   * Creates a tuple establishing that a subject has a specific relation
-   * to an object, optionally with time-based conditions.
-   *
-   * @param args - The permission grant arguments
-   * @param args.who - The subject receiving the permission
-   * @param args.toBe - The relation to grant (e.g., "owner", "editor", "viewer")
-   * @param args.onWhat - The object the permission applies to
-   * @param args.when - Optional time-based validity conditions
-   * @returns Promise resolving to the stored tuple
-   * @throws {SchemaError} If the relation is not defined in the schema
-   *
-   * @example
-   * await authz.allow({
-   *   who: { type: "user", id: "alice" },
-   *   toBe: "editor",
-   *   onWhat: { type: "document", id: "doc123" }
-   * });
-   */
-  async allow(args: {
-    who: Subject<SchemaSubjectTypes<S>>;
-    toBe: TypedRelation<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    when?: Condition;
-  }): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
-    return this.writeTuple({
-      subject: args.who,
-      relation: args.toBe as string & TypedRelation<S>,
-      object: args.onWhat,
-      condition: args.when,
-    });
-  }
-
-  /**
-   * Removes policy tuples (relationships) that match the specified filter criteria.
-   *
-   * This method provides flexibility for removing single or multiple tuples:
-   * - **Single Tuple Removal:** If 'who', 'was', and 'onWhat' are all provided,
-   *   it removes the single, specific tuple matching all criteria (equivalent to the old `disallow`).
-   * - **Bulk Removal:** If only a subset of criteria is provided (e.g., only 'who', or 'who' and 'was'),
-   *   it removes *all* tuples matching that subset. This is useful for scenarios like:
-   *     - Removing all permissions for a user (`{ who: ... }`).
-   *     - Removing all permissions related to an object (`{ onWhat: ... }`).
-   *     - Removing all instances of a specific relation (`{ was: ... }`).
-   *
-   * **Important:** Requires at least one filter criterion (`who`, `was`, or `onWhat`) to be provided.
-   * Providing an empty filter object (`{}`) will result in a console warning and no tuples being deleted,
-   * preventing accidental deletion of all data.
-   *
-   * @param filter An object containing the filter criteria:
-   *   - `who` (Optional): The subject (e.g., `{ type: 'user', id: 'alice' }`) or object acting as subject.
-   *   - `was` (Optional): The relation name (e.g., `'owner'`, `'editor'`).
-   *   - `onWhat` (Optional): The object (e.g., `{ type: 'document', id: 'doc123' }`).
-   * @returns A promise resolving to the number of tuples that were successfully deleted.
-   * @example
-   * // Remove a specific permission
-   * await authz.disallowAllMatching({
-   *   who: { type: 'user', id: 'alice' },
-   *   was: 'viewer',
-   *   onWhat: { type: 'document', id: 'doc1' }
-   * });
-   *
-   * // Remove all permissions for user 'bob'
-   * await authz.disallowAllMatching({ who: { type: 'user', id: 'bob' } });
-   *
-   * // Remove all 'editor' relations on 'doc2'
-   * await authz.disallowAllMatching({ was: 'editor', onWhat: { type: 'document', id: 'doc2' } });
-   * - Providing an empty filter object will result in a warning and no deletion.
-   *
-   * @param filter An object containing optional 'who', 'was' (relation), and 'onWhat' criteria.
-   * @returns A promise resolving to the number of tuples deleted.
-   */
-  async disallowAllMatching(filter: {
-    who?: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    was?: TypedRelation<S>;
-    onWhat?: AnyObject<SchemaObjectTypes<S>>;
-  }): Promise<number> {
-    return this.deleteTuple(filter);
-  }
-  /**
-   * Add a member to a group.
-   *
-   * Creates a group membership tuple, allowing the member to inherit
-   * permissions granted to the group.
-   *
-   * @param args - The membership arguments
-   * @param args.member - The subject or object to add as a member
-   * @param args.group - The group to add the member to
-   * @param args.condition - Optional time-based validity conditions
-   * @returns Promise resolving to the stored membership tuple
-   * @throws {SchemaError} If no group relation is defined in the schema
-   *
-   * @example
-   * await authz.addMember({
-   *   member: { type: "user", id: "alice" },
-   *   group: { type: "team", id: "engineering" }
-   * });
-   */
-  async addMember(args: {
-    member: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaSubjectTypes<S>>;
-    group: AnyObject<SchemaObjectTypes<S>>;
-    condition?: Condition;
-  }): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
-    const groupRelation = this.findGroupRelation();
-    if (!groupRelation)
-      throw new SchemaError(
-        "Schema does not define any relation with type 'group'.",
-      );
-    return this.writeTuple({
-      subject: args.member as TupleSubject<
-        SchemaSubjectTypes<S>,
-        SchemaObjectTypes<S>
-      >,
-      relation: groupRelation as string & TypedRelation<S>,
-      object: args.group,
-      condition: args.condition,
-    });
-  }
-
-  /**
-   * Remove a member from a group.
-   *
-   * Deletes the group membership tuple, revoking inherited permissions
-   * the member had through the group.
-   *
-   * @param args - The membership removal arguments
-   * @param args.member - The subject to remove from the group
-   * @param args.group - The group to remove the member from
-   * @returns Promise resolving to the number of tuples deleted (0 or 1)
-   * @throws {SchemaError} If no group relation is defined in the schema
-   *
-   * @example
-   * await authz.removeMember({
-   *   member: { type: "user", id: "alice" },
-   *   group: { type: "team", id: "engineering" }
-   * });
-   */
-  async removeMember(args: {
-    member: Subject<SchemaSubjectTypes<S>>;
-    group: AnyObject<SchemaObjectTypes<S>>;
-  }): Promise<number> {
-    const groupRelation = this.findGroupRelation();
-    if (!groupRelation) {
-      throw new SchemaError(
-        "Schema does not define any relation with type 'group'.",
-      );
-    }
-    return this.deleteTuple({
-      who: args.member,
-      was: groupRelation as TypedRelation<S>,
-      onWhat: args.group,
-    });
-  }
-
-  /**
-   * Set a parent relationship in a hierarchy.
-   *
-   * Creates a hierarchy tuple, allowing permissions to propagate from
-   * parent to child based on hierarchyPropagation rules in the schema.
-   *
-   * @param args - The hierarchy arguments
-   * @param args.child - The child object in the hierarchy
-   * @param args.parent - The parent object in the hierarchy
-   * @param args.condition - Optional time-based validity conditions
-   * @returns Promise resolving to the stored hierarchy tuple
-   * @throws {SchemaError} If no hierarchy relation is defined in the schema
-   *
-   * @example
-   * await authz.setParent({
-   *   child: { type: "document", id: "doc123" },
-   *   parent: { type: "folder", id: "folder456" }
-   * });
-   */
-  async setParent(args: {
-    child: AnyObject<SchemaObjectTypes<S>>;
-    parent: AnyObject<SchemaObjectTypes<S>>;
-    condition?: Condition;
-  }): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
-    const hierarchyRelation = this.findHierarchyRelation();
-    if (!hierarchyRelation)
-      throw new SchemaError(
-        "Schema does not define any relation with type 'hierarchy'.",
-      );
-    return this.writeTuple({
-      subject: args.child as TupleSubject<
-        SchemaSubjectTypes<S>,
-        SchemaObjectTypes<S>
-      >,
-      relation: hierarchyRelation as string & TypedRelation<S>,
-      object: args.parent,
-      condition: args.condition,
-    });
-  }
-
-  /**
-   * Remove a parent relationship from a hierarchy.
-   *
-   * Deletes the hierarchy tuple, stopping permission propagation
-   * from the parent to the child.
-   *
-   * @param args - The hierarchy removal arguments
-   * @param args.child - The child object in the hierarchy
-   * @param args.parent - The parent object to disconnect from
-   * @returns Promise resolving to the number of tuples deleted (0 or 1)
-   * @throws {SchemaError} If no hierarchy relation is defined in the schema
-   *
-   * @example
-   * await authz.removeParent({
-   *   child: { type: "document", id: "doc123" },
-   *   parent: { type: "folder", id: "folder456" }
-   * });
-   */
-  async removeParent(args: {
-    child: AnyObject<SchemaObjectTypes<S>>;
-    parent: AnyObject<SchemaObjectTypes<S>>;
-  }): Promise<number> {
-    const hierarchyRelation = this.findHierarchyRelation();
-    if (!hierarchyRelation)
-      throw new SchemaError(
-        "Schema does not define any relation with type 'hierarchy'.",
-      );
-    return this.deleteTuple({
-      who: args.child as TupleSubject<
-        SchemaSubjectTypes<S>,
-        SchemaObjectTypes<S>
-      >,
-      was: hierarchyRelation as TypedRelation<S>,
-      onWhat: args.parent,
-    });
-  }
-
-  /**
-   * List permission tuples matching the specified filter criteria.
-   *
-   * Retrieves tuples from storage with optional filtering by subject,
-   * relation, object, or condition. Supports pagination via limit and offset.
-   *
-   * @param filter - Filter criteria for tuples
-   * @param filter.subject - Filter by subject
-   * @param filter.relation - Filter by relation type
-   * @param filter.object - Filter by object
-   * @param filter.condition - Filter by condition
-   * @param options - Pagination options
-   * @param options.limit - Maximum number of tuples to return
-   * @param options.offset - Number of tuples to skip
-   * @returns Promise resolving to an array of matching tuples
-   *
-   * @example
-   * const tuples = await authz.listTuples(
-   *   { subject: { type: "user", id: "alice" } },
-   *   { limit: 10, offset: 0 }
-   * );
-   */
   async listTuples(
     filter: Partial<
       Omit<InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>, "id"> & {
@@ -599,40 +234,16 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       filter as Partial<
         InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>
       >,
+      options,
     );
-    const offset = options?.offset ?? 0;
-    const limit = options?.limit ?? Number.POSITIVE_INFINITY;
-    return results.slice(offset, offset + limit) as StoredTuple<
+    return results as StoredTuple<
       SchemaSubjectTypes<S>,
       SchemaObjectTypes<S>
     >[];
   }
 
-  /**
-   * List all objects of a given type that a subject can access.
-   *
-   * Discovers accessible objects by evaluating direct permissions, group
-   * memberships, and hierarchy propagation. Returns objects with their
-   * allowed actions and parent relationships.
-   *
-   * @param args - The query arguments
-   * @param args.who - The subject to check access for
-   * @param args.ofType - The object type to list (e.g., "document", "folder")
-   * @param args.canThey - Optional action filter to only include objects with this action
-   * @param args.context - Optional context for permission checks
-   * @param args.maxDepth - Maximum recursion depth (defaults to defaultCheckDepth)
-   * @returns Promise resolving to accessible objects with their actions and parents
-   *
-   * @example
-   * const result = await authz.listAccessibleObjects({
-   *   who: { type: "user", id: "alice" },
-   *   ofType: "document",
-   *   canThey: "edit"
-   * });
-   * // result.accessible = [{ object: {...}, actions: ["view", "edit"], parent: {...} }]
-   */
   async listAccessibleObjects(
-    args: ListAccessibleObjectsArgs<S>,
+    args: ListAccessibleObjectsArgs<S> & { limit?: number; offset?: number },
   ): Promise<ListAccessibleObjectsResult<S>> {
     const {
       who,
@@ -642,249 +253,724 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       maxDepth: argsMaxDepth,
     } = args;
     const maxDepth = argsMaxDepth ?? this.defaultCheckDepth;
-    const hierarchyRelation = this.findHierarchyRelation();
 
+    // Map each child to its (first) parent, for the result's `parent` field.
     const childToParentMap = new Map<string, TypedObject<S>>();
-    if (hierarchyRelation) {
-      const allParentLinkTuples = await this.storage.findTuples({
-        relation: hierarchyRelation as string,
-      });
-      for (const tuple of allParentLinkTuples) {
-        if (this.isConditionValid(tuple.condition)) {
-          const childKey = createObjectIdentifierString(
-            tuple.subject as TypedObject<S>,
-          );
-          childToParentMap.set(childKey, tuple.object as TypedObject<S>);
+    for (const hierRel of this.hierRels) {
+      const links = await this.storage.findTuples({ relation: hierRel });
+      for (const link of links) {
+        if (!isConditionValid(link.condition, context)) continue;
+        const childKey = objKey(link.subject);
+        if (!childToParentMap.has(childKey)) {
+          childToParentMap.set(childKey, link.object as TypedObject<S>);
         }
       }
     }
 
-    const potentialObjectIdentifiers = new Map<string, TypedObject<S>>();
-    const visitedForPotential = new Set<string>();
-
-    const addPotentialObject = (obj: TypedObject<S>) => {
-      const objKey = createObjectIdentifierString(obj);
-      if (!visitedForPotential.has(objKey)) {
-        potentialObjectIdentifiers.set(objKey, obj);
-        visitedForPotential.add(objKey);
-      }
-
-      const baseObj = this.getBaseObject(obj);
-      if (baseObj) {
-        const baseKey = createObjectIdentifierString(baseObj);
-        if (!visitedForPotential.has(baseKey)) {
-          potentialObjectIdentifiers.set(baseKey, baseObj);
-          visitedForPotential.add(baseKey);
-        }
-      }
+    const potential = new Map<string, TypedObject<S>>();
+    const addPotential = (obj: { type: string; id: string }) => {
+      potential.set(objKey(obj), obj as TypedObject<S>);
+      const base = this.baseObject(obj);
+      if (base) potential.set(objKey(base), base as TypedObject<S>);
     };
 
-    const directTuples = await this.storage.findTuples({ subject: who });
-    for (const tuple of directTuples) {
-      if (this.isConditionValid(tuple.condition)) {
-        addPotentialObject(tuple.object);
-      }
+    // 1. Objects the subject has a direct relationship to.
+    for (const tuple of await this.storage.findTuples({ subject: who })) {
+      if (isConditionValid(tuple.condition, context))
+        addPotential(tuple.object);
     }
 
+    // 2. Objects reachable via the subject's groups (transitively).
     const groups = await this.findGroupsRecursive(who, maxDepth, new Set());
     for (const group of groups) {
-      const groupTuples = await this.storage.findTuples({ subject: group });
-      for (const tuple of groupTuples) {
-        if (this.isConditionValid(tuple.condition)) {
-          addPotentialObject(tuple.object);
-        }
-      }
-    }
-
-    if (hierarchyRelation) {
-      const propagatingActions = new Set<TypedAction<S>>();
-      if (this.schema.hierarchyPropagation) {
-        for (const childAction in this.schema.hierarchyPropagation) {
-          const parentActions =
-            this.schema.hierarchyPropagation[
-              childAction as keyof S["hierarchyPropagation"]
-            ];
-          if (parentActions) {
-            for (const pa of parentActions)
-              propagatingActions.add(pa as TypedAction<S>);
-          }
-        }
-      }
-
-      const allTuples = await this.storage.findTuples({});
-      const accessibleParents = new Map<string, TypedObject<S>>();
-
-      for (const tuple of allTuples) {
-        const potentialParent = tuple.object as TypedObject<S>;
-        const parentKey = createObjectIdentifierString(potentialParent);
-        if (accessibleParents.has(parentKey)) continue;
-
-        for (const propAction of propagatingActions) {
-          const canAccessParent = await this.check({
-            who,
-            canThey: propAction,
-            onWhat: potentialParent,
-            context,
-            _internalParams: { depth: 0, visited: new Set() },
-          });
-          if (canAccessParent) {
-            accessibleParents.set(parentKey, potentialParent);
-            break;
-          }
-        }
-      }
-
-      for (const parent of accessibleParents.values()) {
-        const childTuples = await this.storage.findTuples({
-          relation: hierarchyRelation as string,
-          object: parent,
-        });
-        for (const childTuple of childTuples) {
-          if (this.isConditionValid(childTuple.condition)) {
-            addPotentialObject(childTuple.subject as TypedObject<S>);
-          }
-        }
-      }
-    }
-
-    const accessible: AccessibleObject<S>[] = [];
-    const checkPromises = Array.from(potentialObjectIdentifiers.values())
-      .filter((objId) => objId.type === ofType)
-      .map(async (objIdentifier) => {
-        const allowedActions = new Set<TypedAction<S>>();
-        const allActions = Object.keys(
-          this.schema.actionToRelations,
-        ) as TypedAction<S>[];
-
-        for (const action of allActions) {
-          const hasAccess = await this.check({
-            who,
-            canThey: action,
-            onWhat: objIdentifier,
-            context,
-            _internalParams: { depth: 0, visited: new Set() },
-          });
-          if (hasAccess) {
-            allowedActions.add(action);
-          }
-        }
-
-        if (allowedActions.size > 0) {
-          if (
-            !specificActionFilter ||
-            allowedActions.has(specificActionFilter)
-          ) {
-            const objIdentifierKey =
-              createObjectIdentifierString(objIdentifier);
-            const parent = childToParentMap.get(objIdentifierKey);
-
-            accessible.push({
-              object: objIdentifier,
-              actions: Array.from(allowedActions),
-              parent: parent,
-            });
-          }
-        }
-      });
-
-    await Promise.all(checkPromises);
-
-    const finalResult: ListAccessibleObjectsResult<S> = { accessible };
-    finalResult.accessible.sort((a, b) => {
-      const keyA = createObjectIdentifierString(a.object);
-      const keyB = createObjectIdentifierString(b.object);
-      return keyA.localeCompare(keyB);
-    });
-
-    return finalResult;
-  }
-
-  private getBaseObject(object: TypedObject<S>): TypedObject<S> | null {
-    const fieldSepIndex = object.id.lastIndexOf(this.fieldSeparator);
-    if (fieldSepIndex > -1) {
-      return {
-        type: object.type,
-        id: object.id.substring(0, fieldSepIndex),
-      };
-    }
-    return null;
-  }
-
-  private findHierarchyRelation(): TypedRelation<S> | undefined {
-    for (const relationName in this.schema.relations) {
-      if (this.schema.relations[relationName]?.type === "hierarchy") {
-        return relationName as TypedRelation<S>;
-      }
-    }
-    return undefined;
-  }
-
-  private findGroupRelation(): TypedRelation<S> | undefined {
-    for (const relationName in this.schema.relations) {
-      if (this.schema.relations[relationName]?.type === "group") {
-        return relationName as TypedRelation<S>;
-      }
-    }
-    return undefined;
-  }
-
-  private async findGroupsRecursive(
-    subject: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>,
-    maxDepth: number,
-    visitedGroups: Set<string>,
-  ): Promise<AnyObject<SchemaObjectTypes<S>>[]> {
-    if (maxDepth <= 0) {
-      return [];
-    }
-
-    const subjectKey = createObjectIdentifierString(subject as TypedObject<S>);
-    if (visitedGroups.has(subjectKey)) {
-      return [];
-    }
-    visitedGroups.add(subjectKey);
-
-    const allGroups: AnyObject<SchemaObjectTypes<S>>[] = [];
-    const groupRelations = Object.entries(this.schema.relations)
-      .filter(([, def]) => (def as RelationDefinition).type === "group")
-      .map(([name]) => name as TypedRelation<S>);
-
-    for (const groupRelation of groupRelations) {
-      const directMembershipTuples = await this.storage.findTuples({
-        subject: subject as TupleSubject<
+      for (const tuple of await this.storage.findTuples({
+        subject: group as TupleSubject<
           SchemaSubjectTypes<S>,
           SchemaObjectTypes<S>
         >,
-        relation: groupRelation as string,
-      });
+      })) {
+        if (isConditionValid(tuple.condition, context))
+          addPotential(tuple.object);
+      }
+    }
 
-      for (const tuple of directMembershipTuples) {
-        if (this.isConditionValid(tuple.condition)) {
-          const group = tuple.object as AnyObject<SchemaObjectTypes<S>>;
-          const groupKey = createObjectIdentifierString(group);
-
-          if (
-            !allGroups.some((g) => createObjectIdentifierString(g) === groupKey)
-          ) {
-            allGroups.push(group);
+    // 3. Descend the hierarchy from accessible objects to their descendants.
+    //    Each descendant is verified with check() below, so an over-inclusive
+    //    candidate set is harmless. No full-table scan is performed.
+    const queue: TypedObject<S>[] = Array.from(potential.values());
+    const walkedParents = new Set<string>();
+    while (queue.length > 0) {
+      const parent = queue.shift() as TypedObject<S>;
+      const pk = objKey(parent);
+      if (walkedParents.has(pk)) continue;
+      walkedParents.add(pk);
+      for (const hierRel of this.hierRels) {
+        const childLinks = await this.storage.findTuples({
+          relation: hierRel,
+          object: parent as AnyObject<SchemaObjectTypes<S>>,
+        });
+        for (const link of childLinks) {
+          if (!isConditionValid(link.condition, context)) continue;
+          const child = link.subject as TypedObject<S>;
+          if (!potential.has(objKey(child))) {
+            addPotential(child);
+            queue.push(child);
           }
+        }
+      }
+    }
 
-          const parentGroups = await this.findGroupsRecursive(
-            group,
-            maxDepth - 1,
-            new Set(visitedGroups),
-          );
-          for (const pg of parentGroups) {
-            const pgKey = createObjectIdentifierString(pg);
+    const allActions = Object.keys(
+      this.schema.actionToRelations,
+    ) as TypedAction<S>[];
+
+    const accessible: AccessibleObject<S>[] = [];
+    await Promise.all(
+      Array.from(potential.values())
+        .filter((obj) => obj.type === ofType)
+        .map(async (obj) => {
+          const allowed: TypedAction<S>[] = [];
+          for (const action of allActions) {
             if (
-              !allGroups.some((g) => createObjectIdentifierString(g) === pgKey)
+              await this.check({ who, canThey: action, onWhat: obj, context })
             ) {
-              allGroups.push(pg);
+              allowed.push(action);
+            }
+          }
+          if (allowed.length === 0) return;
+          if (specificActionFilter && !allowed.includes(specificActionFilter))
+            return;
+          accessible.push({
+            object: obj,
+            actions: allowed,
+            parent: childToParentMap.get(objKey(obj)),
+          });
+        }),
+    );
+
+    accessible.sort((a, b) => objKey(a.object).localeCompare(objKey(b.object)));
+
+    const offset = args.offset ?? 0;
+    const limit = args.limit ?? Number.POSITIVE_INFINITY;
+    return { accessible: accessible.slice(offset, offset + limit) };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Writes
+  // ---------------------------------------------------------------------------
+
+  async writeTuple(
+    tuple: Omit<
+      InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+      "id"
+    > & { relation: TypedRelation<S> },
+  ): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
+    if (!this.schema.relations[tuple.relation]) {
+      throw new SchemaError(
+        `Relation '${String(tuple.relation)}' is not defined in the schema.`,
+      );
+    }
+    this.validateFieldId(tuple.object);
+    const results = await this.storage.write([
+      tuple as InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+    ]);
+    if (!results || results.length === 0 || !results[0]) {
+      throw new Error("Storage adapter failed to return the written tuple.");
+    }
+    return results[0] as StoredTuple<
+      SchemaSubjectTypes<S>,
+      SchemaObjectTypes<S>
+    >;
+  }
+
+  async allow(args: {
+    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    toBe: TypedRelation<S>;
+    onWhat: AnyObject<SchemaObjectTypes<S>>;
+    when?: Condition;
+  }): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
+    return this.writeTuple({
+      subject: args.who as TupleSubject<
+        SchemaSubjectTypes<S>,
+        SchemaObjectTypes<S>
+      >,
+      relation: args.toBe as string & TypedRelation<S>,
+      object: args.onWhat,
+      condition: args.when,
+    });
+  }
+
+  /** Idempotently grant several relationships at once. */
+  async allowMany(
+    grants: Array<{
+      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+      toBe: TypedRelation<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      when?: Condition;
+    }>,
+  ): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[]> {
+    for (const g of grants) {
+      if (!this.schema.relations[g.toBe]) {
+        throw new SchemaError(
+          `Relation '${String(g.toBe)}' is not defined in the schema.`,
+        );
+      }
+      this.validateFieldId(g.onWhat);
+    }
+    const inputs = grants.map((g) => ({
+      subject: g.who,
+      relation: g.toBe as string,
+      object: g.onWhat,
+      condition: g.when,
+    })) as InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[];
+    const results = await this.storage.write(inputs);
+    return results as StoredTuple<
+      SchemaSubjectTypes<S>,
+      SchemaObjectTypes<S>
+    >[];
+  }
+
+  async disallowAllMatching(filter: {
+    who?: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    was?: TypedRelation<S>;
+    onWhat?: AnyObject<SchemaObjectTypes<S>>;
+  }): Promise<number> {
+    return this.deleteTuple(filter);
+  }
+
+  async addMember(args: {
+    member: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    group: AnyObject<SchemaObjectTypes<S>>;
+    as?: TypedRelation<S>;
+    condition?: Condition;
+  }): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
+    const relation = resolveRelation(
+      this.groupRels,
+      args.as as string | undefined,
+      "group",
+      (m) => new SchemaError(m),
+    );
+    return this.writeTuple({
+      subject: args.member as TupleSubject<
+        SchemaSubjectTypes<S>,
+        SchemaObjectTypes<S>
+      >,
+      relation: relation as string & TypedRelation<S>,
+      object: args.group,
+      condition: args.condition,
+    });
+  }
+
+  async removeMember(args: {
+    member: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    group: AnyObject<SchemaObjectTypes<S>>;
+    as?: TypedRelation<S>;
+  }): Promise<number> {
+    const relation = resolveRelation(
+      this.groupRels,
+      args.as as string | undefined,
+      "group",
+      (m) => new SchemaError(m),
+    );
+    return this.deleteTuple({
+      who: args.member,
+      was: relation as TypedRelation<S>,
+      onWhat: args.group,
+    });
+  }
+
+  async setParent(args: {
+    child: AnyObject<SchemaObjectTypes<S>>;
+    parent: AnyObject<SchemaObjectTypes<S>>;
+    as?: TypedRelation<S>;
+    condition?: Condition;
+  }): Promise<StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>> {
+    const relation = resolveRelation(
+      this.hierRels,
+      args.as as string | undefined,
+      "hierarchy",
+      (m) => new SchemaError(m),
+    );
+    return this.writeTuple({
+      subject: args.child as TupleSubject<
+        SchemaSubjectTypes<S>,
+        SchemaObjectTypes<S>
+      >,
+      relation: relation as string & TypedRelation<S>,
+      object: args.parent,
+      condition: args.condition,
+    });
+  }
+
+  async removeParent(args: {
+    child: AnyObject<SchemaObjectTypes<S>>;
+    parent: AnyObject<SchemaObjectTypes<S>>;
+    as?: TypedRelation<S>;
+  }): Promise<number> {
+    const relation = resolveRelation(
+      this.hierRels,
+      args.as as string | undefined,
+      "hierarchy",
+      (m) => new SchemaError(m),
+    );
+    return this.deleteTuple({
+      who: args.child as TupleSubject<
+        SchemaSubjectTypes<S>,
+        SchemaObjectTypes<S>
+      >,
+      was: relation as TypedRelation<S>,
+      onWhat: args.parent,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal engine
+  // ---------------------------------------------------------------------------
+
+  private async deleteTuple(filter: {
+    who?: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+    was?: TypedRelation<S>;
+    onWhat?: AnyObject<SchemaObjectTypes<S>>;
+  }): Promise<number> {
+    if (!filter.who && !filter.was && !filter.onWhat) {
+      this.logger.warn(
+        "disallowAllMatching called with an empty filter. No tuples were deleted.",
+      );
+      return 0;
+    }
+    return this.storage.delete({
+      ...filter,
+      was: filter.was as string | undefined,
+    });
+  }
+
+  /**
+   * Core recursive resolution with cycle-aware memoization.
+   *
+   * `visited` is a stack guard: re-entering a key on the current stack is a cycle
+   * and yields `false` (unstable). `resolved` memoizes results, but only those
+   * not influenced by a cycle or depth cutoff (`stable`), so the memo can never
+   * cache a false produced by cutting a cycle short.
+   */
+  private async resolveAccess(
+    who: { type: string; id: string },
+    action: TypedAction<S>,
+    onWhat: { type: string; id: string },
+    context: Record<string, unknown> | undefined,
+    state: ResolveState,
+  ): Promise<ResolveOutcome> {
+    const key = cacheKey(who, action as string, onWhat);
+
+    if (state.resolved.has(key)) {
+      return { value: state.resolved.get(key) as boolean, stable: true };
+    }
+    if (state.visited.has(key)) {
+      return { value: false, stable: false }; // cycle cutoff
+    }
+    if (state.depth > this.defaultCheckDepth) {
+      if (this.maxDepthBehavior === "throw") {
+        throw new MaxDepthExceededError(
+          `Authorization check exceeded maximum depth (${this.defaultCheckDepth}).`,
+          who,
+          action as string,
+          onWhat,
+          state.depth,
+        );
+      }
+      this.logger.warn(
+        `Authorization check exceeded maximum depth (${this.defaultCheckDepth})`,
+        { who, action, onWhat },
+      );
+      return { value: false, stable: false }; // depth cutoff
+    }
+
+    const requiredRelations = this.schema.actionToRelations[action];
+    if (!requiredRelations || requiredRelations.length === 0) {
+      return { value: false, stable: true };
+    }
+
+    const targets = this.targetIdentifiers(onWhat);
+    state.visited.add(key);
+    let stable = true;
+    try {
+      // 1. Direct relationships (and wildcard/public grants).
+      for (const target of targets) {
+        for (const relation of requiredRelations) {
+          const direct = await this.storage.findTuples({
+            subject: who as TupleSubject<
+              SchemaSubjectTypes<S>,
+              SchemaObjectTypes<S>
+            >,
+            relation: relation as string,
+            object: target as AnyObject<SchemaObjectTypes<S>>,
+          });
+          for (const tuple of direct) {
+            if (isConditionValid(tuple.condition, context)) {
+              state.resolved.set(key, true);
+              return { value: true, stable: true };
+            }
+          }
+          if (who.id !== PUBLIC_ID) {
+            const wild = await this.storage.findTuples({
+              subject: { type: who.type, id: PUBLIC_ID } as TupleSubject<
+                SchemaSubjectTypes<S>,
+                SchemaObjectTypes<S>
+              >,
+              relation: relation as string,
+              object: target as AnyObject<SchemaObjectTypes<S>>,
+            });
+            for (const tuple of wild) {
+              if (isConditionValid(tuple.condition, context)) {
+                state.resolved.set(key, true);
+                return { value: true, stable: true };
+              }
             }
           }
         }
       }
-    }
 
-    return allGroups;
+      // 2. Group memberships (all group relations). Recurse with the original
+      //    onWhat so the group's own field/hierarchy resolution applies.
+      for (const groupRelation of this.groupRels) {
+        const memberships = await this.storage.findTuples({
+          subject: who as TupleSubject<
+            SchemaSubjectTypes<S>,
+            SchemaObjectTypes<S>
+          >,
+          relation: groupRelation,
+        });
+        for (const membership of memberships) {
+          if (!isConditionValid(membership.condition, context)) continue;
+          const sub = await this.resolveAccess(
+            membership.object,
+            action,
+            onWhat,
+            context,
+            { ...state, depth: state.depth + 1 },
+          );
+          if (sub.value) {
+            state.resolved.set(key, true);
+            return { value: true, stable: true };
+          }
+          stable = stable && sub.stable;
+        }
+      }
+
+      // 3. Hierarchy propagation (all hierarchy relations), per target id.
+      if (this.hierRels.length > 0) {
+        const parentActions = this.schema.hierarchyPropagation?.[action];
+        if (parentActions && parentActions.length > 0) {
+          for (const target of targets) {
+            for (const hierRelation of this.hierRels) {
+              const parentLinks = await this.storage.findTuples({
+                subject: target as TupleSubject<
+                  SchemaSubjectTypes<S>,
+                  SchemaObjectTypes<S>
+                >,
+                relation: hierRelation,
+              });
+              for (const link of parentLinks) {
+                if (!isConditionValid(link.condition, context)) continue;
+                for (const parentAction of parentActions) {
+                  const sub = await this.resolveAccess(
+                    who,
+                    parentAction as TypedAction<S>,
+                    link.object,
+                    context,
+                    { ...state, depth: state.depth + 1 },
+                  );
+                  if (sub.value) {
+                    state.resolved.set(key, true);
+                    return { value: true, stable: true };
+                  }
+                  stable = stable && sub.stable;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (stable) state.resolved.set(key, false);
+      return { value: false, stable };
+    } finally {
+      state.visited.delete(key);
+    }
+  }
+
+  /** Parallel walk that returns the first granting path (for `explain`). */
+  private async explainAccess(
+    who: { type: string; id: string },
+    action: TypedAction<S>,
+    onWhat: { type: string; id: string },
+    context: Record<string, unknown> | undefined,
+    depth: number,
+    visited: Set<string>,
+  ): Promise<ExplainNode | null> {
+    const key = cacheKey(who, action as string, onWhat);
+    if (visited.has(key)) return null;
+    if (depth > this.defaultCheckDepth) return null;
+    const requiredRelations = this.schema.actionToRelations[action];
+    if (!requiredRelations || requiredRelations.length === 0) return null;
+
+    const targets = this.targetIdentifiers(onWhat);
+    const wrap = (
+      target: { type: string; id: string },
+      node: ExplainNode,
+    ): ExplainNode =>
+      target.id === onWhat.id
+        ? node
+        : { kind: "field", base: target as AnyObject, via: node };
+
+    visited.add(key);
+    try {
+      for (const target of targets) {
+        for (const relation of requiredRelations) {
+          for (const tuple of await this.storage.findTuples({
+            subject: who as TupleSubject<
+              SchemaSubjectTypes<S>,
+              SchemaObjectTypes<S>
+            >,
+            relation: relation as string,
+            object: target as AnyObject<SchemaObjectTypes<S>>,
+          })) {
+            if (isConditionValid(tuple.condition, context)) {
+              return wrap(target, {
+                kind: "direct",
+                relation: relation as string,
+              });
+            }
+          }
+          if (who.id !== PUBLIC_ID) {
+            for (const tuple of await this.storage.findTuples({
+              subject: { type: who.type, id: PUBLIC_ID } as TupleSubject<
+                SchemaSubjectTypes<S>,
+                SchemaObjectTypes<S>
+              >,
+              relation: relation as string,
+              object: target as AnyObject<SchemaObjectTypes<S>>,
+            })) {
+              if (isConditionValid(tuple.condition, context)) {
+                return wrap(target, {
+                  kind: "wildcard",
+                  relation: relation as string,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      for (const groupRelation of this.groupRels) {
+        for (const membership of await this.storage.findTuples({
+          subject: who as TupleSubject<
+            SchemaSubjectTypes<S>,
+            SchemaObjectTypes<S>
+          >,
+          relation: groupRelation,
+        })) {
+          if (!isConditionValid(membership.condition, context)) continue;
+          const via = await this.explainAccess(
+            membership.object,
+            action,
+            onWhat,
+            context,
+            depth + 1,
+            visited,
+          );
+          if (via) {
+            return {
+              kind: "group",
+              relation: groupRelation,
+              through: membership.object as AnyObject,
+              via,
+            };
+          }
+        }
+      }
+
+      if (this.hierRels.length > 0) {
+        const parentActions = this.schema.hierarchyPropagation?.[action];
+        if (parentActions && parentActions.length > 0) {
+          for (const target of targets) {
+            for (const hierRelation of this.hierRels) {
+              for (const link of await this.storage.findTuples({
+                subject: target as TupleSubject<
+                  SchemaSubjectTypes<S>,
+                  SchemaObjectTypes<S>
+                >,
+                relation: hierRelation,
+              })) {
+                if (!isConditionValid(link.condition, context)) continue;
+                for (const parentAction of parentActions) {
+                  const via = await this.explainAccess(
+                    who,
+                    parentAction as TypedAction<S>,
+                    link.object,
+                    context,
+                    depth + 1,
+                    visited,
+                  );
+                  if (via) {
+                    return wrap(target, {
+                      kind: "hierarchy",
+                      relation: hierRelation,
+                      parent: link.object as AnyObject,
+                      via,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return null;
+    } finally {
+      visited.delete(key);
+    }
+  }
+
+  /** onWhat plus, for field-enabled types, its base object. */
+  private targetIdentifiers(object: {
+    type: string;
+    id: string;
+  }): { type: string; id: string }[] {
+    const ids: { type: string; id: string }[] = [object];
+    const base = this.baseObject(object);
+    if (base) ids.push(base);
+    return ids;
+  }
+
+  /** The base object of a field id, or null when not a (valid) field id. */
+  private baseObject(object: {
+    type: string;
+    id: string;
+  }): { type: string; id: string } | null {
+    if (!isFieldType(this.schema, object.type)) return null;
+    const idx = object.id.lastIndexOf(this.fieldSep);
+    if (idx <= 0) return null; // no separator, or empty base (no wildcard leak)
+    return { type: object.type, id: object.id.substring(0, idx) };
+  }
+
+  /** Reject malformed field ids on write (empty base or empty field). */
+  private validateFieldId(object: { type: string; id: string }): void {
+    if (!isFieldType(this.schema, object.type)) return;
+    const idx = object.id.indexOf(this.fieldSep);
+    if (idx === -1) return;
+    const last = object.id.lastIndexOf(this.fieldSep);
+    const base = object.id.substring(0, last);
+    const field = object.id.substring(last + this.fieldSep.length);
+    if (base.length === 0 || field.length === 0) {
+      throw new SchemaError(
+        `Invalid field id '${object.id}': the base and field around '${this.fieldSep}' must both be non-empty.`,
+      );
+    }
+  }
+
+  /** onWhat, its base, and all hierarchy ancestors (for reverse expansion). */
+  private async ancestorsOf(
+    onWhat: { type: string; id: string },
+    context: Record<string, unknown> | undefined,
+  ): Promise<{ type: string; id: string }[]> {
+    const seen = new Map<string, { type: string; id: string }>();
+    const queue = [...this.targetIdentifiers(onWhat)];
+    let depth = 0;
+    while (queue.length > 0 && depth <= this.defaultCheckDepth) {
+      const next: { type: string; id: string }[] = [];
+      for (const obj of queue) {
+        const k = objKey(obj);
+        if (seen.has(k)) continue;
+        seen.set(k, obj);
+        for (const hierRel of this.hierRels) {
+          for (const link of await this.storage.findTuples({
+            subject: obj as TupleSubject<
+              SchemaSubjectTypes<S>,
+              SchemaObjectTypes<S>
+            >,
+            relation: hierRel,
+          })) {
+            if (isConditionValid(link.condition, context)) {
+              next.push(link.object);
+              const base = this.baseObject(link.object);
+              if (base) next.push(base);
+            }
+          }
+        }
+      }
+      queue.length = 0;
+      queue.push(...next);
+      depth++;
+    }
+    return Array.from(seen.values());
+  }
+
+  /** Recursively collect subjects that are members of `group` (nested groups). */
+  private async collectGroupMembers(
+    group: { type: string; id: string },
+    add: (s: { type: string; id: string }) => void,
+    seen: Set<string>,
+    depth: number,
+  ): Promise<void> {
+    if (depth > this.defaultCheckDepth) return;
+    const k = objKey(group);
+    if (seen.has(k)) return;
+    seen.add(k);
+    for (const groupRelation of this.groupRels) {
+      const members = await this.storage.findSubjects(
+        group as AnyObject<SchemaObjectTypes<S>>,
+        groupRelation,
+      );
+      for (const member of members) {
+        add(member);
+        await this.collectGroupMembers(member, add, seen, depth + 1);
+      }
+    }
+  }
+
+  /** All groups (transitively) that `subject` belongs to. */
+  private async findGroupsRecursive(
+    subject: { type: string; id: string },
+    maxDepth: number,
+    visitedGroups: Set<string>,
+  ): Promise<AnyObject<SchemaObjectTypes<S>>[]> {
+    if (maxDepth <= 0) return [];
+    const subjectKey = objKey(subject);
+    if (visitedGroups.has(subjectKey)) return [];
+    visitedGroups.add(subjectKey);
+
+    const all: AnyObject<SchemaObjectTypes<S>>[] = [];
+    const seen = new Set<string>();
+    for (const groupRelation of this.groupRels) {
+      const memberships = await this.storage.findTuples({
+        subject: subject as TupleSubject<
+          SchemaSubjectTypes<S>,
+          SchemaObjectTypes<S>
+        >,
+        relation: groupRelation,
+      });
+      for (const tuple of memberships) {
+        if (!isConditionValid(tuple.condition)) continue;
+        const group = tuple.object as AnyObject<SchemaObjectTypes<S>>;
+        const gk = objKey(group);
+        if (!seen.has(gk)) {
+          seen.add(gk);
+          all.push(group);
+        }
+        const parents = await this.findGroupsRecursive(
+          group,
+          maxDepth - 1,
+          new Set(visitedGroups),
+        );
+        for (const pg of parents) {
+          const pk = objKey(pg);
+          if (!seen.has(pk)) {
+            seen.add(pk);
+            all.push(pg);
+          }
+        }
+      }
+    }
+    return all;
   }
 }

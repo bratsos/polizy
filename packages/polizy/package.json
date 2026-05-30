@@ -1,7 +1,10 @@
 {
   "name": "polizy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A flexible, Zanzibar-inspired authorization library for Node.js and TypeScript.",
+  "engines": {
+    "node": ">=22.11.0"
+  },
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -34,7 +37,8 @@
     "build:bundle": "rollup -c",
     "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle",
     "dev": "rollup -c -w",
-    "test": "npx dotenv-cli -e ../../examples/app1/.env -- node --no-warnings=ExperimentalWarning --test src/*.test.ts src/**/*.test.ts"
+    "pretest": "prisma generate",
+    "test": "dotenv -e ../../examples/app1/.env -- node --test src/*.test.ts src/**/*.test.ts"
   },
   "keywords": [
     "authorization",
@@ -56,18 +60,19 @@
     "url": "https://github.com/bratsos/polizy/issues"
   },
   "devDependencies": {
-    "@prisma/client": "^6.5.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.2",
     "dotenv": "^16.4.7",
-    "dotenv-cli": "^11.0.0",
     "prisma": "^6.5.0",
     "rollup": "^4.39.0",
     "rollup-plugin-dts": "^6.2.1",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "@prisma/client": "^6.5.0",
+    "dotenv-cli": "^8.0.0"
   },
   "files": [
     "dist",
+    "skills",
     "LICENSE"
   ],
   "dependencies": {

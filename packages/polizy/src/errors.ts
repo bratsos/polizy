@@ -55,6 +55,32 @@ export class StorageError extends PolizyError {
 }
 
 /**
+ * Error thrown by `checkOrThrow` when a subject is not authorized.
+ */
+export class NotAuthorizedError extends PolizyError {
+  public subject: { type: string; id: string };
+  public action: string;
+  public object: { type: string; id: string };
+
+  constructor(
+    subject: { type: string; id: string },
+    action: string,
+    object: { type: string; id: string },
+  ) {
+    super(
+      `${subject.type}:${subject.id} is not authorized to '${action}' on ${object.type}:${object.id}.`,
+    );
+    this.name += "::NotAuthorizedError";
+    this.subject = subject;
+    this.action = action;
+    this.object = object;
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, NotAuthorizedError);
+    }
+  }
+}
+
+/**
  * Error thrown when the maximum recursion depth is exceeded during a check.
  */
 export class MaxDepthExceededError extends PolizyError {

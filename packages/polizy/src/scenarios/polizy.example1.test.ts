@@ -12,6 +12,7 @@ describe("Authorization Service example scenarios", () => {
       const example1Schema = defineSchema({
         subjectTypes: ["user"],
         objectTypes: ["review"],
+        fieldLevelObjects: ["review"],
         relations: {
           owner: { type: "direct" },
           viewer: { type: "direct" },

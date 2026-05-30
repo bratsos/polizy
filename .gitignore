@@ -35,5 +35,5 @@ Thumbs.db
 client-generated
 dev.db
 
-# Documentation
-docs/
+# Internal design / planning documents (keep out of the repo)
+/docs/
