@@ -49,6 +49,22 @@ const cacheKey = (
 
 const objKey = (o: { type: string; id: string }): string => `${o.type}:${o.id}`;
 
+/** Order-independent serialization of a value, for fingerprinting `context`. */
+const stableStringify = (v: unknown): string => {
+  if (v === null || typeof v !== "object")
+    return JSON.stringify(v) ?? "undefined";
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
+  const obj = v as Record<string, unknown>;
+  return `{${Object.keys(obj)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
+    .join(",")}}`;
+};
+
+/** Fingerprint of a check's `context` (conditions depend on it). */
+const contextKey = (context?: Record<string, unknown>): string =>
+  context && Object.keys(context).length > 0 ? stableStringify(context) : "";
+
 /** Internal per-`check` traversal state. */
 type ResolveState<Sub extends SubjectType, Obj extends ObjectType> = {
   depth: number;
@@ -56,6 +72,20 @@ type ResolveState<Sub extends SubjectType, Obj extends ObjectType> = {
   visited: Set<string>;
   /** Memo of fully-resolved, cycle-independent results for this check. */
   resolved: Map<string, boolean>;
+  /** Context fingerprint, part of the cross-check negative-memo key. */
+  ctxKey: string;
+  /**
+   * Optional cross-operation memo of STABLE NEGATIVE subproblems (proven to
+   * have NO granting path), keyed `cacheKey@ctxKey`. Shared across the checks of
+   * one operation so the same dead end isn't re-walked per check. ONLY stable
+   * negatives are shared, and ONLY in `deny` mode: a negative proven by full
+   * exploration is path-free at every depth, and in `deny` mode the engine
+   * returns false (never throws) past the cap, so reusing it is exactly what a
+   * standalone check computes. Positives are never shared (the depth cap is
+   * applied before grants, so a grant past the cap denies); `throw` mode is
+   * never shared (it would suppress a depth-exceeded throw).
+   */
+  sharedNeg?: Set<string>;
   /** Per-operation read layer (broadened range reads + memoization). */
   reader: Reader<Sub, Obj>;
 };
@@ -146,11 +176,14 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       context?: Record<string, unknown>;
     },
     reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+    sharedNeg?: Set<string>,
   ): Promise<boolean> {
     const state: ResolveState<SchemaSubjectTypes<S>, SchemaObjectTypes<S>> = {
       depth: 0,
       visited: new Set(),
       resolved: new Map(),
+      ctxKey: contextKey(request.context),
+      sharedNeg,
       reader,
     };
     const outcome = await this.resolveAccess(
@@ -234,13 +267,24 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   ): Promise<boolean[]> {
     // One shared reader (and snapshot) across the batch: overlapping reads —
     // a subject's grants, a folder's hierarchy — are fetched once for all.
-    // Each request keeps its OWN decision memo: a check is depth-sensitive, so
-    // a memo shared across checks could leak a depth-bounded result.
+    // Each request keeps its OWN decision memo (a check is depth-sensitive), but
+    // they may share proven dead ends (stable negatives) in deny mode.
+    const sharedNeg = this.negMemo();
     return this.withReader(
       (reader) =>
-        Promise.all(requests.map((r) => this.resolveCheck(r, reader))),
+        Promise.all(
+          requests.map((r) => this.resolveCheck(r, reader, sharedNeg)),
+        ),
       { consistency: options?.consistency },
     );
+  }
+
+  /**
+   * A cross-operation stable-negative memo, or undefined when sharing is unsafe.
+   * Only enabled in `deny` mode — see {@link ResolveState.sharedNeg}.
+   */
+  private negMemo(): Set<string> | undefined {
+    return this.maxDepthBehavior === "deny" ? new Set<string>() : undefined;
   }
 
   /** Explain why a check is allowed or denied, returning the granting path. */
@@ -303,15 +347,18 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       }
 
       // Confirm candidates concurrently (reads are shared via `reader`; each
-      // check keeps its own decision memo so a depth-bounded result can't leak).
+      // check keeps its own decision memo, but proven dead ends are shared in
+      // deny mode).
       const toCheck = [...candidates.values()].filter(
         (c) => !ofType || c.type === ofType,
       );
+      const sharedNeg = this.negMemo();
       const decisions = await Promise.all(
         toCheck.map((candidate) =>
           this.resolveCheck(
             { who: candidate, canThey, onWhat, context },
             reader,
+            sharedNeg,
           ),
         ),
       );
@@ -429,6 +476,10 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         this.schema.actionToRelations,
       ) as TypedAction<S>[];
 
+      // The (object, action) checks all share `who` and `context`, so proven
+      // dead ends (e.g. "who is not owner of this folder") are reused across
+      // them in deny mode.
+      const sharedNeg = this.negMemo();
       const accessible: AccessibleObject<S>[] = [];
       await Promise.all(
         Array.from(potential.values())
@@ -440,6 +491,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
                 await this.resolveCheck(
                   { who, canThey: action, onWhat: obj, context },
                   reader,
+                  sharedNeg,
                 )
               ) {
                 allowed.push(action);
@@ -675,6 +727,11 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     if (state.resolved.has(key)) {
       return { value: state.resolved.get(key) as boolean, stable: true };
     }
+    // Cross-check: a subproblem proven path-free by an earlier check in this
+    // operation (deny mode only — see ResolveState.sharedNeg).
+    if (state.sharedNeg?.has(`${key}@${state.ctxKey}`)) {
+      return { value: false, stable: true };
+    }
     if (state.visited.has(key)) {
       return { value: false, stable: false }; // cycle cutoff
     }
@@ -802,7 +859,10 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         }
       }
 
-      if (stable) state.resolved.set(key, false);
+      if (stable) {
+        state.resolved.set(key, false);
+        state.sharedNeg?.add(`${key}@${state.ctxKey}`);
+      }
       return { value: false, stable };
     } finally {
       state.visited.delete(key);
