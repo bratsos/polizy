@@ -37,6 +37,7 @@
     "build:bundle": "rollup -c",
     "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle",
     "dev": "rollup -c -w",
+    "bench": "node --expose-gc --experimental-strip-types --no-warnings bench/bench.ts",
     "pretest": "prisma generate",
     "test": "dotenv -e ../../examples/app1/.env -- node --test src/*.test.ts src/**/*.test.ts"
   },
