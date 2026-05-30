@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Form, Link, useSearchParams } from "react-router";
 import type { Action, Entity, Opened } from "../routes/home";
+import { FormSelect } from "./ui/select";
 
 const ICON: Record<string, string> = {
   folder: "📁",
@@ -432,18 +433,15 @@ function Toolbar({
           <input type="hidden" name="intent" value="setParent" />
           <input type="hidden" name="actingUserId" value={persona} />
           <input type="hidden" name="childKey" value={opened.key} />
-          <select
-            className={input}
+          <FormSelect
             name="parentKey"
-            defaultValue={folders[0]?.key}
-            aria-label="Destination folder"
-          >
-            {folders.map((f) => (
-              <option key={f.key} value={f.key}>
-                📁 {f.name}
-              </option>
-            ))}
-          </select>
+            defaultValue={folders[0]?.key ?? ""}
+            ariaLabel="Destination folder"
+            items={folders.map((f) => ({
+              value: f.key,
+              label: `📁 ${f.name}`,
+            }))}
+          />
           <button className={btn} type="submit">
             📦 Move
           </button>
@@ -503,11 +501,16 @@ function ShareControls({
             placeholder="user id"
             required
           />
-          <select className={input} name="relation" defaultValue="viewer">
-            <option value="viewer">viewer</option>
-            <option value="editor">editor</option>
-            <option value="owner">owner</option>
-          </select>
+          <FormSelect
+            name="relation"
+            defaultValue="viewer"
+            ariaLabel="Relation to grant"
+            items={[
+              { value: "viewer", label: "viewer" },
+              { value: "editor", label: "editor" },
+              { value: "owner", label: "owner" },
+            ]}
+          />
           <button className={btn} type="submit">
             Grant
           </button>
