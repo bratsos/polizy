@@ -1,9 +1,21 @@
 import { PrismaClient } from "@prisma/client-generated";
-import { AuthSystem, defineSchema } from "polizy";
+import { AuthSystem, defineSchema, everyone } from "polizy";
 import { PrismaStorageAdapter } from "polizy/prisma-storage";
 
 const prisma = new PrismaClient();
 
+/**
+ * The authorization model for PolizyDocs.
+ *
+ * - `owner`/`editor`/`viewer` are direct relations on a resource.
+ * - `member` is a group relation: a `member` of a team inherits whatever the
+ *   team itself can do.
+ * - `parent` is a hierarchy relation: a document inside a folder inherits the
+ *   folder's access (per `hierarchyPropagation`).
+ * - `document` is opted into field-level identifiers, so an id like
+ *   `doc-payroll#summary` inherits from its base `doc-payroll` — and can be
+ *   granted independently to expose a single field.
+ */
 const docSchema = defineSchema({
   subjectTypes: ["user", "team"],
   objectTypes: ["document", "folder", "team"],
@@ -24,11 +36,11 @@ const docSchema = defineSchema({
   hierarchyPropagation: {
     view: ["view"],
     edit: ["edit"],
-
     delete: [],
     share: [],
     manage_members: [],
   },
+  fieldLevelObjects: ["document"],
 });
 
 export type DocSchema = typeof docSchema;
@@ -36,147 +48,187 @@ export type DocSchema = typeof docSchema;
 const storage = PrismaStorageAdapter<
   "user" | "team",
   "document" | "folder" | "team"
->(prisma as any);
+>(prisma as never);
 
 const authz = new AuthSystem({ schema: docSchema, storage });
 
-async function seedDatabase() {
-  console.log("Seeding database...");
+const USERS = [
+  { id: "alice", name: "Alice" },
+  { id: "bob", name: "Bob" },
+  { id: "charlie", name: "Charlie" },
+  { id: "david", name: "David" },
+];
 
-  const usersData = [
-    { id: "alice", name: "Alice" },
-    { id: "bob", name: "Bob" },
-    { id: "charlie", name: "Charlie" },
-    { id: "david", name: "David" },
-  ];
-  for (const userData of usersData) {
-    await prisma.user.upsert({
-      where: { id: userData.id },
-      update: {},
-      create: userData,
-    });
-  }
-  console.log("Users seeded.");
+const FOLDERS = [
+  { id: "folder-engineering", name: "Engineering" },
+  { id: "folder-design", name: "Design" },
+];
 
-  await prisma.folder.upsert({
-    where: { id: "folder-a" },
-    update: {},
-    create: { id: "folder-a", name: "Folder A" },
-  });
-  await prisma.document.upsert({
-    where: { id: "doc1" },
-    update: {},
-    create: { id: "doc1", title: "Document 1", content: "Content for Doc 1" },
-  });
-  await prisma.document.upsert({
-    where: { id: "doc2" },
-    update: {},
-    create: { id: "doc2", title: "Document 2", content: "Content for Doc 2" },
-  });
-  await prisma.document.upsert({
-    where: { id: "doc3" },
-    update: {},
-    create: { id: "doc3", title: "Document 3", content: "Content for Doc 3" },
-  });
-  await prisma.team.upsert({
-    where: { id: "team-alpha" },
-    update: {},
-    create: { id: "team-alpha", name: "Team Alpha" },
-  });
-  console.log("Resources seeded.");
+const DOCUMENTS = [
+  {
+    id: "doc-arch",
+    title: "Architecture Spec",
+    content:
+      "# Architecture Spec\n\nEvery permission is a fact: (subject, relation, object).\n\nAlice owns this; Bob can edit it. The Engineering team can view the whole folder, so its members inherit access here through group + hierarchy.",
+  },
+  {
+    id: "doc-api",
+    title: "API Reference",
+    content:
+      "# API Reference\n\ncheck · explain · checkMany · listSubjects · listAccessibleObjects.\n\nThis document lives in the Engineering folder and inherits its permissions through the `parent` hierarchy relation.",
+  },
+  {
+    id: "doc-brand",
+    title: "Brand Guidelines",
+    content: "# Brand Guidelines\n\nColors, type, and tone. Owned by Charlie.",
+  },
+  {
+    id: "doc-roadmap",
+    title: "Public Roadmap",
+    content:
+      '# Public Roadmap\n\nShared with **everyone** via `everyone("user")`. Switch to any persona — they can all read it.',
+  },
+  {
+    id: "doc-payroll",
+    title: "Payroll 2026",
+    content:
+      "# Payroll 2026 (confidential)\n\nBase salaries, equity, and bonuses.\n\nOnly Alice (owner) sees this body. Bob was granted just the `#summary` field — a field-level grant.",
+  },
+  {
+    id: "doc-nda",
+    title: "Contractor NDA",
+    content:
+      "# Contractor NDA\n\nBob has a 7-day time-limited grant to review it; Charlie's grant does not start until next week.",
+  },
+  {
+    id: "doc-eu",
+    title: "EU Market Strategy",
+    content:
+      '# EU Market Strategy\n\nVisible to the Engineering team only when the request context says `region = "eu"` — an attribute (ABAC) condition.',
+  },
+];
 
-  console.log("Seeding Polizy tuples...");
+const TEAMS = [
+  { id: "team-eng", name: "Engineering Team" },
+  { id: "team-design", name: "Design Team" },
+];
 
-  const parseId = (str: string): { type: string; id: string } => {
-    const parts = str.split(":");
-    if (parts.length < 2 || !parts[0]) {
-      throw new Error(`Invalid ID format: "${str}". Expected "type:id".`);
-    }
-    const type = parts[0];
-    const id = parts.slice(1).join(":");
-    return { type, id };
-  };
+const user = (id: string) => ({ type: "user" as const, id });
+const team = (id: string) => ({ type: "team" as const, id });
+const doc = (id: string) => ({ type: "document" as const, id });
+const folder = (id: string) => ({ type: "folder" as const, id });
 
-  const allowTuples = [
-    { who: "user:alice", relation: "owner", on: "folder:folder-a" },
-    { who: "user:alice", relation: "owner", on: "document:doc1" },
-    { who: "user:alice", relation: "owner", on: "document:doc2" },
-    { who: "user:alice", relation: "owner", on: "team:team-alpha" },
-    { who: "user:bob", relation: "owner", on: "document:doc3" },
-    { who: "user:bob", relation: "editor", on: "document:doc1" },
-    { who: "team:team-alpha", relation: "viewer", on: "folder:folder-a" },
-    { who: "user:david", relation: "viewer", on: "document:doc2" },
-  ];
-
-  const parentTuples = [{ child: "document:doc1", parent: "folder:folder-a" }];
-
-  const memberTuples = [{ member: "user:charlie", group: "team:team-alpha" }];
-
-  for (const t of allowTuples) {
-    try {
-      const subject = parseId(t.who);
-      const object = parseId(t.on);
-      await authz.allow({
-        who: { type: subject.type as any, id: subject.id },
-        toBe: t.relation as any,
-        onWhat: { type: object.type as any, id: object.id },
-      });
-    } catch (error: any) {
-      if (
-        error.code !== "P2002" &&
-        !error.message?.includes("already exists")
-      ) {
-        console.warn(
-          `Warning seeding allow tuple ${JSON.stringify(t)}:`,
-          error.message,
-        );
-      }
-    }
-  }
-
-  for (const t of parentTuples) {
-    try {
-      const child = parseId(t.child);
-      const parent = parseId(t.parent);
-      await authz.setParent({
-        child: { type: child.type as any, id: child.id },
-        parent: { type: parent.type as any, id: parent.id },
-      });
-    } catch (error: any) {
-      if (
-        error.code !== "P2002" &&
-        !error.message?.includes("already exists")
-      ) {
-        console.warn(
-          `Warning seeding parent tuple ${JSON.stringify(t)}:`,
-          error.message,
-        );
-      }
-    }
-  }
-
-  for (const t of memberTuples) {
-    try {
-      const member = parseId(t.member);
-      const group = parseId(t.group);
-      await authz.addMember({
-        member: { type: member.type as any, id: member.id },
-        group: { type: group.type as any, id: group.id },
-      });
-    } catch (error: any) {
-      if (
-        error.code !== "P2002" &&
-        !error.message?.includes("already exists")
-      ) {
-        console.warn(
-          `Warning seeding member tuple ${JSON.stringify(t)}:`,
-          error.message,
-        );
-      }
-    }
-  }
-  console.log("Polizy tuples seeded.");
-  console.log("Database seeding complete.");
+/** Wipe every table and re-create the demo world from scratch. */
+export async function resetDatabase(): Promise<void> {
+  await prisma.$transaction([
+    prisma.polizyTuple.deleteMany({}),
+    prisma.document.deleteMany({}),
+    prisma.folder.deleteMany({}),
+    prisma.team.deleteMany({}),
+    prisma.user.deleteMany({}),
+  ]);
+  await seedDatabase();
 }
 
-export { prisma, authz, storage, seedDatabase, docSchema };
+/** Create the seeded world. Assumes empty tables (run after a reset/push). */
+export async function seedDatabase(): Promise<void> {
+  await prisma.user.createMany({ data: USERS });
+  await prisma.folder.createMany({ data: FOLDERS });
+  await prisma.document.createMany({ data: DOCUMENTS });
+  await prisma.team.createMany({ data: TEAMS });
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  // 1. DIRECT grants.
+  await authz.allowMany([
+    {
+      who: user("alice"),
+      toBe: "owner",
+      onWhat: folder("folder-engineering"),
+    },
+    { who: user("alice"), toBe: "owner", onWhat: doc("doc-arch") },
+    { who: user("alice"), toBe: "owner", onWhat: doc("doc-api") },
+    { who: user("alice"), toBe: "owner", onWhat: doc("doc-payroll") },
+    { who: user("alice"), toBe: "owner", onWhat: doc("doc-nda") },
+    { who: user("bob"), toBe: "editor", onWhat: doc("doc-arch") },
+    { who: user("charlie"), toBe: "owner", onWhat: folder("folder-design") },
+    { who: user("charlie"), toBe: "owner", onWhat: doc("doc-brand") },
+    { who: user("charlie"), toBe: "owner", onWhat: doc("doc-eu") },
+  ]);
+
+  // 2. HIERARCHY: documents live inside folders.
+  await authz.setParent({
+    child: doc("doc-arch"),
+    parent: folder("folder-engineering"),
+  });
+  await authz.setParent({
+    child: doc("doc-api"),
+    parent: folder("folder-engineering"),
+  });
+  await authz.setParent({
+    child: doc("doc-brand"),
+    parent: folder("folder-design"),
+  });
+
+  // 3. GROUPS: team membership + a team-level grant. Members of team-eng inherit
+  //    the team's view of the Engineering folder, and its documents inherit that.
+  await authz.addMember({ member: user("charlie"), group: team("team-eng") });
+  await authz.addMember({ member: user("david"), group: team("team-eng") });
+  await authz.addMember({ member: user("bob"), group: team("team-design") });
+  await authz.allow({
+    who: user("alice"),
+    toBe: "owner",
+    onWhat: team("team-eng"),
+  });
+  await authz.allow({
+    who: user("charlie"),
+    toBe: "owner",
+    onWhat: team("team-design"),
+  });
+  await authz.allow({
+    who: team("team-eng"),
+    toBe: "viewer",
+    onWhat: folder("folder-engineering"),
+  });
+
+  // 4. PUBLIC: shared with everyone.
+  await authz.allow({
+    who: everyone("user"),
+    toBe: "viewer",
+    onWhat: doc("doc-roadmap"),
+  });
+
+  // 5. TIME-LIMITED: a valid window on the grant.
+  await authz.allow({
+    who: user("bob"),
+    toBe: "viewer",
+    onWhat: doc("doc-nda"),
+    when: { validUntil: new Date(now + 7 * DAY) },
+  });
+  await authz.allow({
+    who: user("charlie"),
+    toBe: "viewer",
+    onWhat: doc("doc-nda"),
+    when: { validSince: new Date(now + 7 * DAY) },
+  });
+
+  // 6. ABAC: attribute condition evaluated against the check() context.
+  await authz.allow({
+    who: team("team-eng"),
+    toBe: "viewer",
+    onWhat: doc("doc-eu"),
+    when: {
+      attributes: [{ attribute: "region", operator: "eq", value: "eu" }],
+    },
+  });
+
+  // 7. FIELD-LEVEL: grant a single field of a document.
+  await authz.allow({
+    who: user("bob"),
+    toBe: "viewer",
+    onWhat: doc("doc-payroll#summary"),
+  });
+}
+
+export { prisma, authz, storage, docSchema };

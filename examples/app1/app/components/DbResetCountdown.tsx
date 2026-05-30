@@ -12,10 +12,13 @@ export default function DbResetCountdown({
   nextResetAt: number;
 }) {
   const revalidator = useRevalidator();
-  const [label, setLabel] = React.useState(() => fmt(nextResetAt - Date.now()));
+  // Start null so SSR and first client paint agree (avoids a hydration mismatch);
+  // the real countdown is filled in once mounted.
+  const [label, setLabel] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let revalidated = false;
+    setLabel(fmt(nextResetAt - Date.now()));
     const id = setInterval(() => {
       const remaining = nextResetAt - Date.now();
       setLabel(fmt(remaining));
@@ -34,7 +37,7 @@ export default function DbResetCountdown({
       title="The demo database resets to its seeded state on a fixed interval."
     >
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-      resets in {label}
+      resets in {label ?? "--:--"}
     </span>
   );
 }

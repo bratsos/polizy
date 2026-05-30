@@ -1,7 +1,9 @@
-import type { ExplainNode } from "polizy";
+import { type ExplainNode, everyone } from "polizy";
 import {
+  type ActionFunctionArgs,
   data,
   type LoaderFunctionArgs,
+  redirect,
   useActionData,
   useLoaderData,
   useSearchParams,
@@ -85,6 +87,26 @@ const parseKey = (key: string): { type: ObjType; id: string } => {
 };
 const keyOf = (type: string, id: string) => `${type}:${id}`;
 const baseId = (id: string) => id.split(FIELD_SEP)[0] ?? id;
+
+// --- action helpers ---
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+const str = (fd: FormData, k: string) => (fd.get(k) ?? "").toString().trim();
+const ok = (message: string) => data({ ok: true, message });
+const fail = (error: string, status = 400) =>
+  data({ ok: false, error }, { status });
+const parseTarget = (key: string): { type: ObjType; id: string } => {
+  const idx = key.indexOf(":");
+  const type = key.slice(0, idx);
+  const id = key.slice(idx + 1);
+  if (idx <= 0 || !id || !["document", "folder", "team"].includes(type))
+    throw new Error(`Invalid resource key: "${key}".`);
+  return { type: type as ObjType, id };
+};
 
 const toRow = (t: {
   id: string;
@@ -235,11 +257,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     const matrix = await Promise.all(
       USERS.map(async (u) => {
-        const results = await authz.checkMany({
-          who: { type: "user" as const, id: u },
-          checks: ACTIONS.map((a) => ({ canThey: a, onWhat: target })),
-          context,
-        });
+        const results = await authz.checkMany(
+          ACTIONS.map((a) => ({
+            who: { type: "user" as const, id: u },
+            canThey: a,
+            onWhat: target,
+            context,
+          })),
+        );
         const actions: Record<string, boolean> = {};
         ACTIONS.forEach((a, i) => {
           actions[a] = results[i] ?? false;
@@ -263,12 +288,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
       }),
     ]);
 
+    // Surface tuples on the object, its field-base, and its hierarchy ancestors,
+    // so e.g. a team→folder grant shows when inspecting a document inside it.
     const base = baseId(id);
+    const relevantObjects = new Set<string>([
+      keyOf(type, id),
+      keyOf(type, base),
+    ]);
+    let ancestor =
+      parentOf.get(keyOf(type, base)) ?? parentOf.get(keyOf(type, id));
+    while (ancestor) {
+      relevantObjects.add(ancestor);
+      ancestor = parentOf.get(ancestor);
+    }
     const tuples = allTupleRows
       .filter(
         (t) =>
-          (t.objectType === type &&
-            (t.objectId === id || t.objectId === base)) ||
+          relevantObjects.has(keyOf(t.objectType, t.objectId)) ||
           (t.subjectType === type && t.subjectId === base),
       )
       .map(toRow);
@@ -302,7 +338,229 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
 }
 
-export { action } from "../lib/home-action.server";
+// Inlined (rather than imported from a `.server` module) because React Router's
+// route analysis only registers an `action` declared in the route module
+// itself — an imported binding yields 405s on POST.
+export async function action({ request }: ActionFunctionArgs) {
+  const fd = await request.formData();
+  const intent = str(fd, "intent");
+  const actingUserId = str(fd, "actingUserId");
+  if (!actingUserId) return fail("Missing acting user.");
+  const me = { type: "user" as const, id: actingUserId };
+  const can = (canThey: Action, onWhat: { type: ObjType; id: string }) =>
+    authz.check({ who: me, canThey, onWhat });
+
+  try {
+    switch (intent) {
+      case "createDocument":
+      case "createFolder":
+      case "createTeam": {
+        const name = str(fd, "name") || str(fd, "title");
+        if (!name) return fail("A name is required.");
+        const id = slug(name);
+        if (!id) return fail("Name produced an empty id.");
+        if (intent === "createDocument") {
+          await prisma.document.create({
+            data: { id, title: name, content: `# ${name}\n\n` },
+          });
+          await authz.allow({
+            who: me,
+            toBe: "owner",
+            onWhat: { type: "document", id },
+          });
+        } else if (intent === "createFolder") {
+          await prisma.folder.create({ data: { id, name } });
+          await authz.allow({
+            who: me,
+            toBe: "owner",
+            onWhat: { type: "folder", id },
+          });
+        } else {
+          await prisma.team.create({ data: { id, name } });
+          await authz.allow({
+            who: me,
+            toBe: "owner",
+            onWhat: { type: "team", id },
+          });
+        }
+        return ok(
+          `Created ${intent.replace("create", "").toLowerCase()} "${name}". You are its owner.`,
+        );
+      }
+
+      case "share": {
+        const target = parseTarget(str(fd, "resourceKey"));
+        const targetUserId = str(fd, "targetUserId");
+        const relation = str(fd, "relation") || "viewer";
+        if (!targetUserId) return fail("Pick someone to share with.");
+        if (
+          relation !== "viewer" &&
+          relation !== "editor" &&
+          relation !== "owner"
+        )
+          return fail("Role must be viewer, editor, or owner.");
+        if (!(await can("share", target)))
+          return fail(`${actingUserId} can't share this.`, 403);
+        // Conferring ownership is a transfer — only an owner may do it, not
+        // anyone who merely has `share` (an editor has `share`, not `owner`).
+        if (relation === "owner" && !(await can("delete", target)))
+          return fail("Only an owner can grant ownership.", 403);
+        await authz.allow({
+          who: { type: "user", id: targetUserId },
+          toBe: relation,
+          onWhat: target,
+        });
+        return ok(`Shared ${target.id} with ${targetUserId} as ${relation}.`);
+      }
+
+      case "sharePublic": {
+        const target = parseTarget(str(fd, "resourceKey"));
+        if (!(await can("share", target)))
+          return fail(`${actingUserId} can't share this.`, 403);
+        await authz.allow({
+          who: everyone("user"),
+          toBe: "viewer",
+          onWhat: target,
+        });
+        return ok(`${target.id} is now public — everyone can view it.`);
+      }
+
+      case "shareTimed": {
+        const target = parseTarget(str(fd, "resourceKey"));
+        const targetUserId = str(fd, "targetUserId");
+        const days = Math.max(1, Number.parseInt(str(fd, "days") || "7", 10));
+        if (!targetUserId) return fail("Pick someone to share with.");
+        if (!(await can("share", target)))
+          return fail(`${actingUserId} can't share this.`, 403);
+        await authz.allow({
+          who: { type: "user", id: targetUserId },
+          toBe: "viewer",
+          onWhat: target,
+          when: { validUntil: new Date(Date.now() + days * 86_400_000) },
+        });
+        return ok(
+          `Granted ${targetUserId} ${days}-day access to ${target.id}.`,
+        );
+      }
+
+      case "shareField": {
+        const target = parseTarget(str(fd, "resourceKey"));
+        const field = str(fd, "field");
+        const targetUserId = str(fd, "targetUserId");
+        if (!field || !targetUserId)
+          return fail("Field and recipient are required.");
+        if (target.type !== "document")
+          return fail("Field grants are for documents.");
+        if (!(await can("share", target)))
+          return fail(`${actingUserId} can't share this.`, 403);
+        await authz.allow({
+          who: { type: "user", id: targetUserId },
+          toBe: "viewer",
+          onWhat: { type: "document", id: `${target.id}#${field}` },
+        });
+        return ok(
+          `Granted ${targetUserId} the "${field}" field of ${target.id}.`,
+        );
+      }
+
+      case "addMember":
+      case "removeMember": {
+        const team = parseTarget(str(fd, "teamKey"));
+        const userId = str(fd, "userId");
+        if (team.type !== "team")
+          return fail("Members can only be managed on teams.");
+        if (!userId) return fail("Pick a user.");
+        if (!(await can("manage_members", team)))
+          return fail(`${actingUserId} can't manage this team.`, 403);
+        const member = { type: "user" as const, id: userId };
+        if (intent === "addMember") {
+          await authz.addMember({
+            member,
+            group: { type: "team", id: team.id },
+          });
+          return ok(`Added ${userId} to ${team.id}.`);
+        }
+        await authz.removeMember({
+          member,
+          group: { type: "team", id: team.id },
+        });
+        return ok(`Removed ${userId} from ${team.id}.`);
+      }
+
+      case "setParent": {
+        const child = parseTarget(str(fd, "childKey"));
+        const parent = parseTarget(str(fd, "parentKey"));
+        if (!(await can("edit", child)))
+          return fail(`${actingUserId} can't move this.`, 403);
+        if (!(await can("edit", parent)))
+          return fail(`${actingUserId} can't file into that folder.`, 403);
+        await authz.setParent({ child, parent });
+        return ok(`Moved ${child.id} into ${parent.id}.`);
+      }
+
+      case "saveEdit": {
+        const target = parseTarget(str(fd, "resourceKey"));
+        const content = (fd.get("content") ?? "").toString();
+        if (!(await can("edit", target)))
+          return fail(`${actingUserId} can't edit this.`, 403);
+        await prisma.document.update({
+          where: { id: target.id },
+          data: { content },
+        });
+        return ok(`Saved ${target.id}.`);
+      }
+
+      case "delete": {
+        const target = parseTarget(str(fd, "resourceKey"));
+        if (!(await can("delete", target)))
+          return fail(`${actingUserId} can't delete this.`, 403);
+        if (target.type === "document")
+          await prisma.document.delete({ where: { id: target.id } });
+        else if (target.type === "folder")
+          await prisma.folder.delete({ where: { id: target.id } });
+        else await prisma.team.delete({ where: { id: target.id } });
+        await authz.disallowAllMatching({ onWhat: target });
+        return redirect(`/?as=${actingUserId}`);
+      }
+
+      case "revoke": {
+        const onWhat = {
+          type: str(fd, "objectType") as ObjType,
+          id: str(fd, "objectId"),
+        };
+        if (!(await can("share", onWhat)))
+          return fail(`${actingUserId} can't change sharing here.`, 403);
+        const subjectType = str(fd, "subjectType") as "user" | "team";
+        const subjectId = str(fd, "subjectId");
+        const was = str(fd, "relation");
+        // Revoking an ownership grant is owner-level, not merely `share`.
+        if (was === "owner" && !(await can("delete", onWhat)))
+          return fail("Only an owner can revoke an ownership grant.", 403);
+        await authz.disallowAllMatching({
+          who: { type: subjectType, id: subjectId },
+          was: was as "owner" | "editor" | "viewer" | "member" | "parent",
+          onWhat,
+        });
+        return ok(
+          `Revoked ${subjectType}:${subjectId} ${was} on ${onWhat.id}.`,
+        );
+      }
+
+      default:
+        return fail(`Unknown intent "${intent}".`);
+    }
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "P2002")
+      return fail("That name is already taken — pick another.", 409);
+    if (code === "P2025")
+      return fail(
+        "That item no longer exists (the demo may have just reset).",
+        404,
+      );
+    return fail(error instanceof Error ? error.message : "Action failed.", 500);
+  }
+}
 
 export default function Home() {
   const ld = useLoaderData<HomeLoaderData>();
@@ -331,7 +589,11 @@ export default function Home() {
           {flash.error}
         </div>
       )}
-      <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-0 lg:grid-cols-[300px_1fr]">
+      <div
+        className={`mx-auto grid max-w-[1400px] grid-cols-1 gap-0 lg:grid-cols-[300px_1fr] ${
+          ld.inspect ? "sm:pr-[440px]" : ""
+        }`}
+      >
         <Workspace
           persona={ld.persona}
           entities={ld.entities}
