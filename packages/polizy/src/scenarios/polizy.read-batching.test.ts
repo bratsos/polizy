@@ -199,3 +199,40 @@ describe("read batching (fetch-then-resolve)", () => {
     assert.equal(after, false);
   });
 });
+
+describe("read-layer identity", () => {
+  it("treats objects with extra properties as distinct (full-value identity)", async () => {
+    const storage = new InMemoryStorageAdapter<
+      "user" | "team",
+      "document" | "folder" | "team"
+    >();
+    const authz = new AuthSystem({ schema, storage });
+    // A grant whose object carries metadata beyond {type,id}. The broadened
+    // range read keys on the subject, so object identity is enforced purely by
+    // the in-memory filter — which must match the adapter's full-value equality.
+    const tagged = { type: "document", id: "1", tenant: "acme" } as unknown as {
+      type: "document";
+      id: string;
+    };
+    await authz.allow({ who: USER("alice"), toBe: "owner", onWhat: tagged });
+
+    // A bare {type,id} check must NOT match the tenant-tagged tuple...
+    assert.equal(
+      await authz.check({
+        who: USER("alice"),
+        canThey: "view",
+        onWhat: DOC("1"),
+      }),
+      false,
+    );
+    // ...but the exact (tenant-tagged) object does.
+    assert.equal(
+      await authz.check({
+        who: USER("alice"),
+        canThey: "view",
+        onWhat: tagged,
+      }),
+      true,
+    );
+  });
+});

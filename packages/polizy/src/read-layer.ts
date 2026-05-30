@@ -1,3 +1,4 @@
+import { deepEqual } from "fast-equals";
 import type { ReadOnlyStorage } from "./polizy.storage.ts";
 import type {
   AnyObject,
@@ -36,17 +37,13 @@ function matches<S extends SubjectType, O extends ObjectType>(
   t: StoredTuple<S, O>,
   f: Partial<InputTuple<S, O>>,
 ): boolean {
-  if (
-    f.subject &&
-    (t.subject.type !== f.subject.type || t.subject.id !== f.subject.id)
-  )
-    return false;
+  // Full-value identity, exactly like the storage adapters' filters: a subject
+  // or object carrying extra properties beyond {type,id} is NOT the same tuple
+  // as a bare {type,id}. Comparing only type+id here would let a broadened
+  // range read match tuples the adapter's point query would have rejected.
+  if (f.subject && !deepEqual(t.subject, f.subject)) return false;
   if (f.relation && t.relation !== f.relation) return false;
-  if (
-    f.object &&
-    (t.object.type !== f.object.type || t.object.id !== f.object.id)
-  )
-    return false;
+  if (f.object && !deepEqual(t.object, f.object)) return false;
   return true;
 }
 
