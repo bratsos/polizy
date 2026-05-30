@@ -1,0 +1,23 @@
+{
+  // Cloudflare Workers — Static Assets (this is Workers, NOT Pages).
+  //
+  // The demo is a React Router v7 SPA (`ssr: false`): it has no server code,
+  // because every visitor's database is a real Postgres running in their own
+  // browser via PGlite. `react-router build` emits a fully static site to
+  // `build/client/` (including an `index.html` shell and the PGlite .wasm/.data
+  // assets), so this is an "assets-only" Worker — there is no `main` entrypoint.
+  //
+  // Deploy:  pnpm run deploy    (builds, then `wrangler deploy`)
+  // Preview: pnpm run preview   (builds, then `wrangler dev` — serves the assets locally)
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "polizy-demo",
+  "compatibility_date": "2025-09-23",
+  "assets": {
+    // The prebuilt SPA. `react-router build` with ssr:false writes here.
+    "directory": "./build/client",
+    // Client-side routing: any path that doesn't map to a built file is served
+    // `index.html` with HTTP 200, so React Router resolves the route in the
+    // browser instead of returning a 404.
+    "not_found_handling": "single-page-application"
+  }
+}

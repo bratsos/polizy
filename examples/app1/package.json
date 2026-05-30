@@ -8,7 +8,9 @@
     "build": "react-router build",
     "dev": "react-router dev",
     "start": "sirv build/client --single --host 0.0.0.0 --port ${PORT:-3000}",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "react-router typegen && tsc",
+    "deploy": "pnpm run build && wrangler deploy",
+    "preview": "pnpm run build && wrangler dev"
   },
   "keywords": [],
   "author": "",
@@ -36,6 +38,7 @@
     "tailwindcss": "^4.1.1",
     "typescript": "^5.8.2",
     "vite": "^6.2.4",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite-tsconfig-paths": "^5.1.4",
+    "wrangler": "^4.34.0"
   }
 }
