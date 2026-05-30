@@ -1,3 +1,5 @@
+// The database reset now runs in-process inside the server (see
+// app/lib/db-reset.server.ts), so there is no separate scheduler process.
 module.exports = {
   apps: [
     {
@@ -6,17 +8,6 @@ module.exports = {
       args: "start",
       cwd: __dirname,
       watch: false,
-      env: {
-        NODE_ENV: "production",
-      },
-    },
-    {
-      name: "db-reset-scheduler",
-      script: "./reset-scheduler.js",
-      cwd: __dirname,
-      watch: false,
-      interpreter: "node",
-      node_args: "-r dotenv/config",
       env: {
         NODE_ENV: "production",
       },

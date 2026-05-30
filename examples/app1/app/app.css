@@ -9,6 +9,12 @@
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
+html,
+body {
+  background-color: #09090b;
+  color-scheme: dark;
+}
+
 @theme {
   --color-main-light-400: #e7e7e9;
   --color-main-light-300: #ceced4;

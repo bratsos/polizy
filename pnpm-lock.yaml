@@ -39,9 +39,6 @@ importers:
       isbot:
         specifier: ^5.1.25
         version: 5.1.25
-      node-cron:
-        specifier: ^3.0.3
-        version: 3.0.3
       pm2:
         specifier: ^6.0.5
         version: 6.0.5
@@ -57,9 +54,6 @@ importers:
       react-router:
         specifier: ^7.4.1
         version: 7.4.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      zod:
-        specifier: ^3.24.2
-        version: 3.24.2
     devDependencies:
       '@react-router/dev':
         specifier: ^7.4.1
@@ -2902,10 +2896,6 @@ packages:
   netmask@2.0.2:
     resolution: {integrity: sha512-dBpDMdxv9Irdq66304OLfEmQ9tbNRFnFTuZiLo+bD+r332bBmMJ8GBLXklIXXgxd3+v9+KUnZaUR5PJMa75Gsg==}
     engines: {node: '>= 0.4.0'}
-
-  node-cron@3.0.3:
-    resolution: {integrity: sha512-dOal67//nohNgYWb+nWmg5dkFdIwDm8EpeGYMekPMrngV3637lqnX0lbUcCtgibHTz6SEz7DAIjKvKDFYCnO1A==}
-    engines: {node: '>=6.0.0'}
 
   node-html-parser@6.1.13:
     resolution: {integrity: sha512-qIsTMOY4C/dAa5Q5vsobRpOOvPfC4pB61UVW2uSwZNUp0QU/jCekTal1vMmbO0DgdHeLUJpv/ARmDqErVxA3Sg==}
@@ -6836,10 +6826,6 @@ snapshots:
   negotiator@0.6.4: {}
 
   netmask@2.0.2: {}
-
-  node-cron@3.0.3:
-    dependencies:
-      uuid: 8.3.2
 
   node-html-parser@6.1.13:
     dependencies:

@@ -1,62 +1,46 @@
 import * as React from "react";
+import { useRevalidator } from "react-router";
 
-interface DbResetCountdownProps {
-  intervalMinutes: number;
-}
-
-const calculateTimeLeft = (intervalMinutes: number): string => {
-  const now = new Date();
-  const currentMinutes = now.getMinutes();
-  const currentSeconds = now.getSeconds();
-
-  const minutesPastInterval = currentMinutes % intervalMinutes;
-  const secondsUntilNextInterval =
-    ((intervalMinutes - minutesPastInterval) * 60 -
-      currentSeconds +
-      intervalMinutes * 60) %
-    (intervalMinutes * 60);
-
-  const minutesLeft = Math.floor(secondsUntilNextInterval / 60);
-  const secondsLeft = secondsUntilNextInterval % 60;
-
-  return `${String(minutesLeft).padStart(2, "0")}:${String(
-    secondsLeft,
-  ).padStart(2, "0")}`;
-};
-
-const DbResetCountdown: React.FC<DbResetCountdownProps> = ({
-  intervalMinutes,
-}) => {
-  const [timeLeft, setTimeLeft] = React.useState<string>(() =>
-    calculateTimeLeft(intervalMinutes),
-  );
+/**
+ * Counts down to the server-provided `nextResetAt` (epoch ms). When it elapses,
+ * the server has already reset on the next request, so we revalidate to pull the
+ * fresh world in place (no full page reload needed).
+ */
+export default function DbResetCountdown({
+  nextResetAt,
+}: {
+  nextResetAt: number;
+}) {
+  const revalidator = useRevalidator();
+  const [label, setLabel] = React.useState(() => fmt(nextResetAt - Date.now()));
 
   React.useEffect(() => {
-    let hasReloaded = false;
-    const timerId = setInterval(() => {
-      const newTimeLeft = calculateTimeLeft(intervalMinutes);
-      setTimeLeft(newTimeLeft);
-
-      if (newTimeLeft === "00:00" && !hasReloaded) {
-        hasReloaded = true;
-        console.log("Countdown finished. Reloading page...");
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
-      } else if (newTimeLeft !== "00:00") {
-        hasReloaded = false;
+    let revalidated = false;
+    const id = setInterval(() => {
+      const remaining = nextResetAt - Date.now();
+      setLabel(fmt(remaining));
+      if (remaining <= 0 && !revalidated) {
+        revalidated = true;
+        // Give the server a beat to perform the reset, then refetch.
+        setTimeout(() => revalidator.revalidate(), 800);
       }
     }, 1000);
-
-    return () => clearInterval(timerId);
-  }, [intervalMinutes]);
+    return () => clearInterval(id);
+  }, [nextResetAt, revalidator]);
 
   return (
-    <div className="text-sm text-gray-600 dark:text-gray-400 text-center my-4">
-      <span>Next automatic DB reset in: </span>
-      <span className="font-mono font-semibold">{timeLeft}</span>
-    </div>
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-xs text-zinc-400"
+      title="The demo database resets to its seeded state on a fixed interval."
+    >
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+      resets in {label}
+    </span>
   );
-};
+}
 
-export default DbResetCountdown;
+function fmt(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
