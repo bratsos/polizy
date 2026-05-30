@@ -135,7 +135,12 @@ export default function Workspace({
         {!opened ? (
           <Empty persona={persona} />
         ) : (
-          <ResourceView persona={persona} opened={opened} href={href} />
+          <ResourceView
+            persona={persona}
+            opened={opened}
+            href={href}
+            folders={folders}
+          />
         )}
       </main>
     </>
@@ -160,10 +165,12 @@ function ResourceView({
   persona,
   opened,
   href,
+  folders,
 }: {
   persona: string;
   opened: Opened;
   href: (over: Record<string, string | null>) => string;
+  folders: { key: string; name: string }[];
 }) {
   const [editing, setEditing] = React.useState(false);
   const allow = (a: Action) => opened.actions.includes(a);
@@ -249,6 +256,7 @@ function ResourceView({
         allow={allow}
         editing={editing}
         setEditing={setEditing}
+        folders={folders}
       />
     </div>
   );
@@ -400,12 +408,14 @@ function Toolbar({
   allow,
   editing,
   setEditing,
+  folders,
 }: {
   persona: string;
   opened: Opened;
   allow: (a: Action) => boolean;
   editing: boolean;
   setEditing: (v: boolean) => void;
+  folders: { key: string; name: string }[];
 }) {
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -413,6 +423,31 @@ function Toolbar({
         <button className={btn} type="button" onClick={() => setEditing(true)}>
           ✏️ Edit
         </button>
+      )}
+      {opened.type === "document" && allow("edit") && folders.length > 0 && (
+        // Move this document into a folder — `setParent` rewires the `parent`
+        // hierarchy edge, so the doc immediately inherits that folder's grants.
+        // The action also checks you can edit the destination folder.
+        <Form method="post" className="flex items-center gap-1">
+          <input type="hidden" name="intent" value="setParent" />
+          <input type="hidden" name="actingUserId" value={persona} />
+          <input type="hidden" name="childKey" value={opened.key} />
+          <select
+            className={input}
+            name="parentKey"
+            defaultValue={folders[0]?.key}
+            aria-label="Destination folder"
+          >
+            {folders.map((f) => (
+              <option key={f.key} value={f.key}>
+                📁 {f.name}
+              </option>
+            ))}
+          </select>
+          <button className={btn} type="submit">
+            📦 Move
+          </button>
+        </Form>
       )}
       {allow("delete") && (
         <Form
