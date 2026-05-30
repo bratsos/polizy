@@ -234,6 +234,8 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   ): Promise<boolean[]> {
     // One shared reader (and snapshot) across the batch: overlapping reads —
     // a subject's grants, a folder's hierarchy — are fetched once for all.
+    // Each request keeps its OWN decision memo: a check is depth-sensitive, so
+    // a memo shared across checks could leak a depth-bounded result.
     return this.withReader(
       (reader) =>
         Promise.all(requests.map((r) => this.resolveCheck(r, reader))),
@@ -248,7 +250,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     onWhat: AnyObject<SchemaObjectTypes<S>>;
     context?: Record<string, unknown>;
   }): Promise<ExplainResult> {
-    const via = await this.withReader((reader) =>
+    const result = await this.withReader((reader) =>
       this.explainAccess(
         request.who,
         request.canThey,
@@ -256,10 +258,11 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         request.context,
         0,
         new Set(),
+        new Set(),
         reader,
       ),
     );
-    return { allowed: via !== null, via };
+    return { allowed: result.via !== null, via: result.via };
   }
 
   /**
@@ -299,18 +302,20 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         }
       }
 
-      const confirmed: Subject<SchemaSubjectTypes<S>>[] = [];
-      for (const candidate of candidates.values()) {
-        if (ofType && candidate.type !== ofType) continue;
-        if (
-          await this.resolveCheck(
+      // Confirm candidates concurrently (reads are shared via `reader`; each
+      // check keeps its own decision memo so a depth-bounded result can't leak).
+      const toCheck = [...candidates.values()].filter(
+        (c) => !ofType || c.type === ofType,
+      );
+      const decisions = await Promise.all(
+        toCheck.map((candidate) =>
+          this.resolveCheck(
             { who: candidate, canThey, onWhat, context },
             reader,
-          )
-        ) {
-          confirmed.push(candidate);
-        }
-      }
+          ),
+        ),
+      );
+      const confirmed = toCheck.filter((_, i) => decisions[i]);
       confirmed.sort((a, b) => objKey(a).localeCompare(objKey(b)));
       return confirmed;
     });
@@ -812,13 +817,22 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     context: Record<string, unknown> | undefined,
     depth: number,
     visited: Set<string>,
+    noPath: Set<string>,
     reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
-  ): Promise<ExplainNode | null> {
+  ): Promise<{ via: ExplainNode | null; stable: boolean }> {
     const key = cacheKey(who, action as string, onWhat);
-    if (visited.has(key)) return null;
-    if (depth > this.defaultCheckDepth) return null;
+    // Stable negative memo: keys proven to have NO granting path (fully
+    // explored, not cut short by a cycle or the depth cap) short-circuit, so a
+    // shared subproblem isn't re-walked once per path. Without it, explain walks
+    // the subproblem DAG as a tree — exponential on deep deny paths.
+    if (noPath.has(key)) return { via: null, stable: true };
+    if (visited.has(key)) return { via: null, stable: false };
+    if (depth > this.defaultCheckDepth) return { via: null, stable: false };
     const requiredRelations = this.schema.actionToRelations[action];
-    if (!requiredRelations || requiredRelations.length === 0) return null;
+    if (!requiredRelations || requiredRelations.length === 0) {
+      noPath.add(key);
+      return { via: null, stable: true };
+    }
 
     const targets = this.targetIdentifiers(onWhat);
     const wrap = (
@@ -830,6 +844,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         : { kind: "field", base: target as AnyObject, via: node };
 
     visited.add(key);
+    let stable = true;
     try {
       for (const target of targets) {
         for (const relation of requiredRelations) {
@@ -842,10 +857,13 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
             object: target as AnyObject<SchemaObjectTypes<S>>,
           })) {
             if (isConditionValid(tuple.condition, context)) {
-              return wrap(target, {
-                kind: "direct",
-                relation: relation as string,
-              });
+              return {
+                via: wrap(target, {
+                  kind: "direct",
+                  relation: relation as string,
+                }),
+                stable: true,
+              };
             }
           }
           if (who.id !== PUBLIC_ID) {
@@ -858,10 +876,13 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
               object: target as AnyObject<SchemaObjectTypes<S>>,
             })) {
               if (isConditionValid(tuple.condition, context)) {
-                return wrap(target, {
-                  kind: "wildcard",
-                  relation: relation as string,
-                });
+                return {
+                  via: wrap(target, {
+                    kind: "wildcard",
+                    relation: relation as string,
+                  }),
+                  stable: true,
+                };
               }
             }
           }
@@ -877,23 +898,28 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
           relation: groupRelation,
         })) {
           if (!isConditionValid(membership.condition, context)) continue;
-          const via = await this.explainAccess(
+          const child = await this.explainAccess(
             membership.object,
             action,
             onWhat,
             context,
             depth + 1,
             visited,
+            noPath,
             reader,
           );
-          if (via) {
+          if (child.via) {
             return {
-              kind: "group",
-              relation: groupRelation,
-              through: membership.object as AnyObject,
-              via,
+              via: {
+                kind: "group",
+                relation: groupRelation,
+                through: membership.object as AnyObject,
+                via: child.via,
+              },
+              stable: true,
             };
           }
+          if (!child.stable) stable = false;
         }
       }
 
@@ -911,30 +937,37 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
               })) {
                 if (!isConditionValid(link.condition, context)) continue;
                 for (const parentAction of parentActions) {
-                  const via = await this.explainAccess(
+                  const child = await this.explainAccess(
                     who,
                     parentAction as TypedAction<S>,
                     link.object,
                     context,
                     depth + 1,
                     visited,
+                    noPath,
                     reader,
                   );
-                  if (via) {
-                    return wrap(target, {
-                      kind: "hierarchy",
-                      relation: hierRelation,
-                      parent: link.object as AnyObject,
-                      via,
-                    });
+                  if (child.via) {
+                    return {
+                      via: wrap(target, {
+                        kind: "hierarchy",
+                        relation: hierRelation,
+                        parent: link.object as AnyObject,
+                        via: child.via,
+                      }),
+                      stable: true,
+                    };
                   }
+                  if (!child.stable) stable = false;
                 }
               }
             }
           }
         }
       }
-      return null;
+
+      if (stable) noPath.add(key);
+      return { via: null, stable };
     } finally {
       visited.delete(key);
     }
