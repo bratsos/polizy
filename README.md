@@ -246,6 +246,19 @@ await authz.listTuples({ subject: { type: "user", id: "alice" } }, { limit: 50, 
 
 Every operation reads through a per-operation layer that fetches broad range reads once and resolves in memory — so a check that revisits the same subject or object many times hits storage a handful of times, not once per edge. `checkMany` shares one reader across the whole batch.
 
+**Rendering a page of many checks?** Wrap them in a read scope so they share a *single* read pass instead of one per operation:
+
+```ts
+const view = await authz.withReadScope(async (scope) => {
+  const docs = await scope.listAccessibleObjects({ who, ofType: "document" });
+  const grid = await scope.checkMany(rows);
+  const why  = await scope.explain({ who, canThey: "edit", onWhat });
+  return { docs, grid, why };
+}, { preload: true });
+```
+
+Inside the scope, `check`/`checkMany`/`explain`/`listAccessibleObjects`/`listSubjects` all share one reader, so each subject/object/relation is fetched at most once for the whole scope. `{ preload: true }` fetches the entire tuple set in **one** read up front, so every check then resolves in memory — ideal when storage round-trips are expensive (an in-browser DB, a slow link) or the working set is small. Omit it for large stores, where the per-key range reads scale better.
+
 By default reads are live (each broadened range read is internally consistent, but the operation isn't pinned to a single instant). For a coherent point-in-time view, pass `consistency: "strong"` — every read in the operation comes from one snapshot, **without blocking writers**:
 
 ```ts

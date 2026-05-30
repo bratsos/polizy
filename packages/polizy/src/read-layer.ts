@@ -103,11 +103,16 @@ export class ReadCache<S extends SubjectType, O extends ObjectType>
   async findTuples(
     filter: Partial<InputTuple<S, O>>,
   ): Promise<StoredTuple<S, O>[]> {
-    const { key, broad } = this.broaden(filter);
-    let entry = this.sets.get(key);
+    // Preload fast-path: once the whole store has been fetched (key "*", e.g.
+    // by a read scope's preload), serve every query from it — no narrower reads.
+    let entry = this.sets.get("*");
     if (!entry) {
-      entry = this.fetch(broad);
-      this.sets.set(key, entry);
+      const { key, broad } = this.broaden(filter);
+      entry = this.sets.get(key);
+      if (!entry) {
+        entry = this.fetch(broad);
+        this.sets.set(key, entry);
+      }
     }
     const { all, byRelation } = await entry;
     // Narrow by relation first: a broad per-subject/-object set splits across
