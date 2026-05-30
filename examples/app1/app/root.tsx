@@ -1,4 +1,3 @@
-import { SymbiosisProvider } from "@synopsisapp/symbiosis-ui";
 import {
   isRouteErrorResponse,
   Links,
@@ -16,15 +15,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>PolizyDocs — authorization, made visible</title>
         <Meta />
         <Links />
       </head>
-      <body>
-        <SymbiosisProvider scheme="light">
-          {children}
-          <ScrollRestoration />
-          <Scripts />
-        </SymbiosisProvider>
+      <body className="bg-zinc-50 text-zinc-900 antialiased">
+        {children}
+        <ScrollRestoration />
+        <Scripts />
       </body>
     </html>
   );
@@ -32,6 +30,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return <Outlet />;
+}
+
+/**
+ * Rendered while the app hydrates. There is no server data: each visitor's
+ * database (a real Postgres, via PGlite) boots in their own browser, then the
+ * route's `clientLoader` runs. This is what's on screen during that beat.
+ */
+export function HydrateFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-zinc-500">
+      <div className="text-center">
+        <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-500" />
+        <p className="text-sm">Booting Postgres in your browser…</p>
+      </div>
+    </div>
+  );
 }
 
 export function ErrorBoundary({ error }: { error: unknown }) {
@@ -51,11 +65,11 @@ export function ErrorBoundary({ error }: { error: unknown }) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
-      <p>{details}</p>
+    <main className="container mx-auto p-4 pt-16">
+      <h1 className="text-xl font-semibold">{message}</h1>
+      <p className="mt-2 text-zinc-600">{details}</p>
       {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
+        <pre className="mt-4 w-full overflow-x-auto rounded-lg border border-zinc-200 bg-white p-4 text-sm">
           <code>{stack}</code>
         </pre>
       )}

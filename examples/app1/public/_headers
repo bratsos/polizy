@@ -1,0 +1,21 @@
+# Cloudflare Workers static-assets response headers.
+# https://developers.cloudflare.com/workers/static-assets/headers/
+# Vite copies everything under public/ to build/client/, so this lands at the
+# served root where Workers reads it.
+
+# Vite content-hashes every file under /assets/ (the filename changes whenever
+# the bytes change), so they are safe to cache forever. This matters here: the
+# PGlite engine ships ~16 MB of version-pinned .wasm/.data under /assets/, and
+# immutable caching keeps repeat visits from re-downloading it.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Defensive: guarantee the WASM MIME type. Workers normally infers
+# application/wasm from the extension, but binary-type edge cases exist; PGlite
+# compiles from an ArrayBuffer so this is belt-and-suspenders, not required.
+/*.wasm
+  Content-Type: application/wasm
+
+# Note: deliberately NO Cross-Origin-Embedder/Opener-Policy. Single-threaded
+# PGlite needs neither SharedArrayBuffer nor cross-origin isolation, and COOP
+# "same-origin" would break OAuth/payment popups.
