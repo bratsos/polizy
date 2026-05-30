@@ -6,6 +6,7 @@ import {
   SchemaError,
 } from "./errors.ts";
 import type { StorageAdapter } from "./polizy.storage.ts";
+import { ReadCache, type Reader } from "./read-layer.ts";
 import {
   fieldSeparator,
   groupRelations,
@@ -24,10 +25,12 @@ import type {
   ListAccessibleObjectsArgs,
   ListAccessibleObjectsResult,
   Logger,
+  ObjectType,
   SchemaObjectTypes,
   SchemaSubjectTypes,
   StoredTuple,
   Subject,
+  SubjectType,
   TupleSubject,
   TypedAction,
   TypedObject,
@@ -47,12 +50,14 @@ const cacheKey = (
 const objKey = (o: { type: string; id: string }): string => `${o.type}:${o.id}`;
 
 /** Internal per-`check` traversal state. */
-type ResolveState = {
+type ResolveState<Sub extends SubjectType, Obj extends ObjectType> = {
   depth: number;
   /** Cycle guard: keys currently on the recursion stack. */
   visited: Set<string>;
   /** Memo of fully-resolved, cycle-independent results for this check. */
   resolved: Map<string, boolean>;
+  /** Per-operation read layer (broadened range reads + memoization). */
+  reader: Reader<Sub, Obj>;
 };
 
 /**
@@ -109,11 +114,44 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     canThey: TypedAction<S>;
     onWhat: AnyObject<SchemaObjectTypes<S>>;
     context?: Record<string, unknown>;
+    /**
+     * Ephemeral tuples evaluated as if they were stored — the embeddable way to
+     * get read-your-writes (e.g. pass the grant you just made) without a token
+     * protocol. Never persisted.
+     */
+    contextualTuples?: InputTuple<
+      SchemaSubjectTypes<S>,
+      SchemaObjectTypes<S>
+    >[];
+    /**
+     * Reserved consistency knob (mirrors OpenFGA). Today every check reads
+     * storage live, so both values behave identically; this exists so callers
+     * can express intent before a cache/replica layer (and a revision token)
+     * lands. See the read-after-write notes in the docs.
+     */
+    consistency?: "default" | "strong";
   }): Promise<boolean> {
-    const state: ResolveState = {
+    return this.withReader(
+      (reader) => this.resolveCheck(request, reader),
+      this.toContextual(request.contextualTuples),
+    );
+  }
+
+  /** Resolve one check against a given (per-operation) reader. */
+  private async resolveCheck(
+    request: {
+      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      context?: Record<string, unknown>;
+    },
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+  ): Promise<boolean> {
+    const state: ResolveState<SchemaSubjectTypes<S>, SchemaObjectTypes<S>> = {
       depth: 0,
       visited: new Set(),
       resolved: new Map(),
+      reader,
     };
     const outcome = await this.resolveAccess(
       request.who,
@@ -123,6 +161,35 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       state,
     );
     return outcome.value;
+  }
+
+  /**
+   * Run a read operation against a per-operation {@link Reader}. The reader
+   * fetches broad, deduplicated range reads (fetch-then-resolve) and, when the
+   * adapter supports it, all reads come from ONE point-in-time snapshot so a
+   * single operation sees a coherent view without locking writers.
+   */
+  private async withReader<T>(
+    fn: (
+      reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+    ) => Promise<T>,
+    contextual: StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[] = [],
+  ): Promise<T> {
+    const storage = this.storage;
+    if (storage.withSnapshot) {
+      return storage.withSnapshot((snap) =>
+        fn(new ReadCache(snap, contextual)),
+      );
+    }
+    return fn(new ReadCache(storage, contextual));
+  }
+
+  /** Stamp request-scoped tuples with a synthetic id so they read like stored ones. */
+  private toContextual(
+    tuples?: InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[],
+  ): StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[] {
+    if (!tuples || tuples.length === 0) return [];
+    return tuples.map((t, i) => ({ ...t, id: `ctx:${i}` }));
   }
 
   /** Like {@link check}, but throws {@link NotAuthorizedError} when denied. */
@@ -155,7 +222,11 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       context?: Record<string, unknown>;
     }>,
   ): Promise<boolean[]> {
-    return Promise.all(requests.map((r) => this.check(r)));
+    // One shared reader (and snapshot) across the batch: overlapping reads —
+    // a subject's grants, a folder's hierarchy — are fetched once for all.
+    return this.withReader((reader) =>
+      Promise.all(requests.map((r) => this.resolveCheck(r, reader))),
+    );
   }
 
   /** Explain why a check is allowed or denied, returning the granting path. */
@@ -165,13 +236,16 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     onWhat: AnyObject<SchemaObjectTypes<S>>;
     context?: Record<string, unknown>;
   }): Promise<ExplainResult> {
-    const via = await this.explainAccess(
-      request.who,
-      request.canThey,
-      request.onWhat,
-      request.context,
-      0,
-      new Set(),
+    const via = await this.withReader((reader) =>
+      this.explainAccess(
+        request.who,
+        request.canThey,
+        request.onWhat,
+        request.context,
+        0,
+        new Set(),
+        reader,
+      ),
     );
     return { allowed: via !== null, via };
   }
@@ -188,38 +262,46 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     context?: Record<string, unknown>;
   }): Promise<Subject<SchemaSubjectTypes<S>>[]> {
     const { canThey, onWhat, ofType, context } = args;
-    const candidates = new Map<string, Subject<SchemaSubjectTypes<S>>>();
-    const addCandidate = (s: { type: string; id: string }) => {
-      candidates.set(objKey(s), s as Subject<SchemaSubjectTypes<S>>);
-    };
+    return this.withReader(async (reader) => {
+      const candidates = new Map<string, Subject<SchemaSubjectTypes<S>>>();
+      const addCandidate = (s: { type: string; id: string }) => {
+        candidates.set(objKey(s), s as Subject<SchemaSubjectTypes<S>>);
+      };
 
-    // Objects whose grantees could reach onWhat: onWhat, its base, its ancestors.
-    const objectsToInspect = await this.ancestorsOf(onWhat, context);
+      // Objects whose grantees could reach onWhat: onWhat, its base, its ancestors.
+      const objectsToInspect = await this.ancestorsOf(onWhat, context, reader);
 
-    for (const obj of objectsToInspect) {
-      const holders = await this.storage.findTuples({
-        object: obj as AnyObject<SchemaObjectTypes<S>>,
-      });
-      for (const tuple of holders) {
-        addCandidate(tuple.subject);
-        await this.collectGroupMembers(
-          tuple.subject,
-          addCandidate,
-          new Set(),
-          0,
-        );
+      for (const obj of objectsToInspect) {
+        const holders = await reader.findTuples({
+          object: obj as AnyObject<SchemaObjectTypes<S>>,
+        });
+        for (const tuple of holders) {
+          addCandidate(tuple.subject);
+          await this.collectGroupMembers(
+            tuple.subject,
+            addCandidate,
+            new Set(),
+            0,
+            reader,
+          );
+        }
       }
-    }
 
-    const confirmed: Subject<SchemaSubjectTypes<S>>[] = [];
-    for (const candidate of candidates.values()) {
-      if (ofType && candidate.type !== ofType) continue;
-      if (await this.check({ who: candidate, canThey, onWhat, context })) {
-        confirmed.push(candidate);
+      const confirmed: Subject<SchemaSubjectTypes<S>>[] = [];
+      for (const candidate of candidates.values()) {
+        if (ofType && candidate.type !== ofType) continue;
+        if (
+          await this.resolveCheck(
+            { who: candidate, canThey, onWhat, context },
+            reader,
+          )
+        ) {
+          confirmed.push(candidate);
+        }
       }
-    }
-    confirmed.sort((a, b) => objKey(a).localeCompare(objKey(b)));
-    return confirmed;
+      confirmed.sort((a, b) => objKey(a).localeCompare(objKey(b)));
+      return confirmed;
+    });
   }
 
   async listTuples(
@@ -254,105 +336,117 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     } = args;
     const maxDepth = argsMaxDepth ?? this.defaultCheckDepth;
 
-    // Map each child to its (first) parent, for the result's `parent` field.
-    const childToParentMap = new Map<string, TypedObject<S>>();
-    for (const hierRel of this.hierRels) {
-      const links = await this.storage.findTuples({ relation: hierRel });
-      for (const link of links) {
-        if (!isConditionValid(link.condition, context)) continue;
-        const childKey = objKey(link.subject);
-        if (!childToParentMap.has(childKey)) {
-          childToParentMap.set(childKey, link.object as TypedObject<S>);
+    return this.withReader(async (reader) => {
+      // Map each child to its (first) parent, for the result's `parent` field.
+      const childToParentMap = new Map<string, TypedObject<S>>();
+      for (const hierRel of this.hierRels) {
+        const links = await reader.findTuples({ relation: hierRel });
+        for (const link of links) {
+          if (!isConditionValid(link.condition, context)) continue;
+          const childKey = objKey(link.subject);
+          if (!childToParentMap.has(childKey)) {
+            childToParentMap.set(childKey, link.object as TypedObject<S>);
+          }
         }
       }
-    }
 
-    const potential = new Map<string, TypedObject<S>>();
-    const addPotential = (obj: { type: string; id: string }) => {
-      potential.set(objKey(obj), obj as TypedObject<S>);
-      const base = this.baseObject(obj);
-      if (base) potential.set(objKey(base), base as TypedObject<S>);
-    };
+      const potential = new Map<string, TypedObject<S>>();
+      const addPotential = (obj: { type: string; id: string }) => {
+        potential.set(objKey(obj), obj as TypedObject<S>);
+        const base = this.baseObject(obj);
+        if (base) potential.set(objKey(base), base as TypedObject<S>);
+      };
 
-    // 1. Objects the subject has a direct relationship to.
-    for (const tuple of await this.storage.findTuples({ subject: who })) {
-      if (isConditionValid(tuple.condition, context))
-        addPotential(tuple.object);
-    }
-
-    // 2. Objects reachable via the subject's groups (transitively).
-    const groups = await this.findGroupsRecursive(who, maxDepth, new Set());
-    for (const group of groups) {
-      for (const tuple of await this.storage.findTuples({
-        subject: group as TupleSubject<
-          SchemaSubjectTypes<S>,
-          SchemaObjectTypes<S>
-        >,
-      })) {
+      // 1. Objects the subject has a direct relationship to.
+      for (const tuple of await reader.findTuples({ subject: who })) {
         if (isConditionValid(tuple.condition, context))
           addPotential(tuple.object);
       }
-    }
 
-    // 3. Descend the hierarchy from accessible objects to their descendants.
-    //    Each descendant is verified with check() below, so an over-inclusive
-    //    candidate set is harmless. No full-table scan is performed.
-    const queue: TypedObject<S>[] = Array.from(potential.values());
-    const walkedParents = new Set<string>();
-    while (queue.length > 0) {
-      const parent = queue.shift() as TypedObject<S>;
-      const pk = objKey(parent);
-      if (walkedParents.has(pk)) continue;
-      walkedParents.add(pk);
-      for (const hierRel of this.hierRels) {
-        const childLinks = await this.storage.findTuples({
-          relation: hierRel,
-          object: parent as AnyObject<SchemaObjectTypes<S>>,
-        });
-        for (const link of childLinks) {
-          if (!isConditionValid(link.condition, context)) continue;
-          const child = link.subject as TypedObject<S>;
-          if (!potential.has(objKey(child))) {
-            addPotential(child);
-            queue.push(child);
+      // 2. Objects reachable via the subject's groups (transitively).
+      const groups = await this.findGroupsRecursive(
+        who,
+        maxDepth,
+        new Set(),
+        reader,
+      );
+      for (const group of groups) {
+        for (const tuple of await reader.findTuples({
+          subject: group as TupleSubject<
+            SchemaSubjectTypes<S>,
+            SchemaObjectTypes<S>
+          >,
+        })) {
+          if (isConditionValid(tuple.condition, context))
+            addPotential(tuple.object);
+        }
+      }
+
+      // 3. Descend the hierarchy from accessible objects to their descendants.
+      //    Each descendant is verified with check() below, so an over-inclusive
+      //    candidate set is harmless. No full-table scan is performed.
+      const queue: TypedObject<S>[] = Array.from(potential.values());
+      const walkedParents = new Set<string>();
+      while (queue.length > 0) {
+        const parent = queue.shift() as TypedObject<S>;
+        const pk = objKey(parent);
+        if (walkedParents.has(pk)) continue;
+        walkedParents.add(pk);
+        for (const hierRel of this.hierRels) {
+          const childLinks = await reader.findTuples({
+            relation: hierRel,
+            object: parent as AnyObject<SchemaObjectTypes<S>>,
+          });
+          for (const link of childLinks) {
+            if (!isConditionValid(link.condition, context)) continue;
+            const child = link.subject as TypedObject<S>;
+            if (!potential.has(objKey(child))) {
+              addPotential(child);
+              queue.push(child);
+            }
           }
         }
       }
-    }
 
-    const allActions = Object.keys(
-      this.schema.actionToRelations,
-    ) as TypedAction<S>[];
+      const allActions = Object.keys(
+        this.schema.actionToRelations,
+      ) as TypedAction<S>[];
 
-    const accessible: AccessibleObject<S>[] = [];
-    await Promise.all(
-      Array.from(potential.values())
-        .filter((obj) => obj.type === ofType)
-        .map(async (obj) => {
-          const allowed: TypedAction<S>[] = [];
-          for (const action of allActions) {
-            if (
-              await this.check({ who, canThey: action, onWhat: obj, context })
-            ) {
-              allowed.push(action);
+      const accessible: AccessibleObject<S>[] = [];
+      await Promise.all(
+        Array.from(potential.values())
+          .filter((obj) => obj.type === ofType)
+          .map(async (obj) => {
+            const allowed: TypedAction<S>[] = [];
+            for (const action of allActions) {
+              if (
+                await this.resolveCheck(
+                  { who, canThey: action, onWhat: obj, context },
+                  reader,
+                )
+              ) {
+                allowed.push(action);
+              }
             }
-          }
-          if (allowed.length === 0) return;
-          if (specificActionFilter && !allowed.includes(specificActionFilter))
-            return;
-          accessible.push({
-            object: obj,
-            actions: allowed,
-            parent: childToParentMap.get(objKey(obj)),
-          });
-        }),
-    );
+            if (allowed.length === 0) return;
+            if (specificActionFilter && !allowed.includes(specificActionFilter))
+              return;
+            accessible.push({
+              object: obj,
+              actions: allowed,
+              parent: childToParentMap.get(objKey(obj)),
+            });
+          }),
+      );
 
-    accessible.sort((a, b) => objKey(a.object).localeCompare(objKey(b.object)));
+      accessible.sort((a, b) =>
+        objKey(a.object).localeCompare(objKey(b.object)),
+      );
 
-    const offset = args.offset ?? 0;
-    const limit = args.limit ?? Number.POSITIVE_INFINITY;
-    return { accessible: accessible.slice(offset, offset + limit) };
+      const offset = args.offset ?? 0;
+      const limit = args.limit ?? Number.POSITIVE_INFINITY;
+      return { accessible: accessible.slice(offset, offset + limit) };
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -557,7 +651,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     action: TypedAction<S>,
     onWhat: { type: string; id: string },
     context: Record<string, unknown> | undefined,
-    state: ResolveState,
+    state: ResolveState<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<ResolveOutcome> {
     const key = cacheKey(who, action as string, onWhat);
 
@@ -596,7 +690,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       // 1. Direct relationships (and wildcard/public grants).
       for (const target of targets) {
         for (const relation of requiredRelations) {
-          const direct = await this.storage.findTuples({
+          const direct = await state.reader.findTuples({
             subject: who as TupleSubject<
               SchemaSubjectTypes<S>,
               SchemaObjectTypes<S>
@@ -611,7 +705,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
             }
           }
           if (who.id !== PUBLIC_ID) {
-            const wild = await this.storage.findTuples({
+            const wild = await state.reader.findTuples({
               subject: { type: who.type, id: PUBLIC_ID } as TupleSubject<
                 SchemaSubjectTypes<S>,
                 SchemaObjectTypes<S>
@@ -632,7 +726,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       // 2. Group memberships (all group relations). Recurse with the original
       //    onWhat so the group's own field/hierarchy resolution applies.
       for (const groupRelation of this.groupRels) {
-        const memberships = await this.storage.findTuples({
+        const memberships = await state.reader.findTuples({
           subject: who as TupleSubject<
             SchemaSubjectTypes<S>,
             SchemaObjectTypes<S>
@@ -662,7 +756,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         if (parentActions && parentActions.length > 0) {
           for (const target of targets) {
             for (const hierRelation of this.hierRels) {
-              const parentLinks = await this.storage.findTuples({
+              const parentLinks = await state.reader.findTuples({
                 subject: target as TupleSubject<
                   SchemaSubjectTypes<S>,
                   SchemaObjectTypes<S>
@@ -706,6 +800,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     context: Record<string, unknown> | undefined,
     depth: number,
     visited: Set<string>,
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<ExplainNode | null> {
     const key = cacheKey(who, action as string, onWhat);
     if (visited.has(key)) return null;
@@ -726,7 +821,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     try {
       for (const target of targets) {
         for (const relation of requiredRelations) {
-          for (const tuple of await this.storage.findTuples({
+          for (const tuple of await reader.findTuples({
             subject: who as TupleSubject<
               SchemaSubjectTypes<S>,
               SchemaObjectTypes<S>
@@ -742,7 +837,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
             }
           }
           if (who.id !== PUBLIC_ID) {
-            for (const tuple of await this.storage.findTuples({
+            for (const tuple of await reader.findTuples({
               subject: { type: who.type, id: PUBLIC_ID } as TupleSubject<
                 SchemaSubjectTypes<S>,
                 SchemaObjectTypes<S>
@@ -762,7 +857,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       }
 
       for (const groupRelation of this.groupRels) {
-        for (const membership of await this.storage.findTuples({
+        for (const membership of await reader.findTuples({
           subject: who as TupleSubject<
             SchemaSubjectTypes<S>,
             SchemaObjectTypes<S>
@@ -777,6 +872,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
             context,
             depth + 1,
             visited,
+            reader,
           );
           if (via) {
             return {
@@ -794,7 +890,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         if (parentActions && parentActions.length > 0) {
           for (const target of targets) {
             for (const hierRelation of this.hierRels) {
-              for (const link of await this.storage.findTuples({
+              for (const link of await reader.findTuples({
                 subject: target as TupleSubject<
                   SchemaSubjectTypes<S>,
                   SchemaObjectTypes<S>
@@ -810,6 +906,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
                     context,
                     depth + 1,
                     visited,
+                    reader,
                   );
                   if (via) {
                     return wrap(target, {
@@ -872,6 +969,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   private async ancestorsOf(
     onWhat: { type: string; id: string },
     context: Record<string, unknown> | undefined,
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<{ type: string; id: string }[]> {
     const seen = new Map<string, { type: string; id: string }>();
     const queue = [...this.targetIdentifiers(onWhat)];
@@ -883,7 +981,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
         if (seen.has(k)) continue;
         seen.set(k, obj);
         for (const hierRel of this.hierRels) {
-          for (const link of await this.storage.findTuples({
+          for (const link of await reader.findTuples({
             subject: obj as TupleSubject<
               SchemaSubjectTypes<S>,
               SchemaObjectTypes<S>
@@ -911,19 +1009,20 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     add: (s: { type: string; id: string }) => void,
     seen: Set<string>,
     depth: number,
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<void> {
     if (depth > this.defaultCheckDepth) return;
     const k = objKey(group);
     if (seen.has(k)) return;
     seen.add(k);
     for (const groupRelation of this.groupRels) {
-      const members = await this.storage.findSubjects(
+      const members = await reader.findSubjects(
         group as AnyObject<SchemaObjectTypes<S>>,
         groupRelation,
       );
       for (const member of members) {
         add(member);
-        await this.collectGroupMembers(member, add, seen, depth + 1);
+        await this.collectGroupMembers(member, add, seen, depth + 1, reader);
       }
     }
   }
@@ -933,6 +1032,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     subject: { type: string; id: string },
     maxDepth: number,
     visitedGroups: Set<string>,
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<AnyObject<SchemaObjectTypes<S>>[]> {
     if (maxDepth <= 0) return [];
     const subjectKey = objKey(subject);
@@ -942,7 +1042,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     const all: AnyObject<SchemaObjectTypes<S>>[] = [];
     const seen = new Set<string>();
     for (const groupRelation of this.groupRels) {
-      const memberships = await this.storage.findTuples({
+      const memberships = await reader.findTuples({
         subject: subject as TupleSubject<
           SchemaSubjectTypes<S>,
           SchemaObjectTypes<S>
@@ -961,6 +1061,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
           group,
           maxDepth - 1,
           new Set(visitedGroups),
+          reader,
         );
         for (const pg of parents) {
           const pk = objKey(pg);

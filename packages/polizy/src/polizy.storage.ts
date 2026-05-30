@@ -61,4 +61,21 @@ export interface StorageAdapter<
     relation: Relation,
     options?: { objectType?: O },
   ): Promise<AnyObject<O>[]>;
+
+  /**
+   * Optional: run `fn` against a read-only view pinned to a single point in
+   * time, so one authorization operation sees a consistent snapshot WITHOUT
+   * locking writers (e.g. a read-only `REPEATABLE READ` transaction for SQL, or
+   * a captured copy for in-memory). Adapters that can't provide this omit it,
+   * and the engine falls back to live reads.
+   */
+  withSnapshot?<T>(
+    fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>,
+  ): Promise<T>;
 }
+
+/** The read-only subset of a {@link StorageAdapter}, exposed to snapshot callbacks. */
+export type ReadOnlyStorage<
+  S extends SubjectType = SubjectType,
+  O extends ObjectType = ObjectType,
+> = Pick<StorageAdapter<S, O>, "findTuples" | "findSubjects" | "findObjects">;
