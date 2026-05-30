@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { InfoTip } from "./ui/tooltip";
 
 type Props = {
   persona: string;
@@ -63,17 +64,18 @@ export default function TopBar({ persona, users, region, tupleCount }: Props) {
 
         {/* ABAC toggle: adds `region=eu` to the request context. The EU-strategy
             doc has an attribute condition granting the Eng team only when region=eu. */}
-        <Link
-          to={withParam("region", region === "eu" ? null : "eu")}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-            region === "eu"
-              ? "border-amber-300 bg-amber-50 text-amber-700"
-              : "border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800"
-          }`}
-          title="Sets the request context to region=eu. The EU Market Strategy doc grants the Engineering team only when region=eu — an ABAC attribute condition."
-        >
-          ctx: region = {region === "eu" ? "eu" : "—"}
-        </Link>
+        <InfoTip label="Sets the request context to region=eu. The EU Market Strategy doc grants the Engineering team only when region=eu — an ABAC attribute condition.">
+          <Link
+            to={withParam("region", region === "eu" ? null : "eu")}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+              region === "eu"
+                ? "border-amber-300 bg-amber-50 text-amber-700"
+                : "border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            ctx: region = {region === "eu" ? "eu" : "—"}
+          </Link>
+        </InfoTip>
 
         <div className="ml-auto flex items-center gap-3">
           <span className="font-mono text-xs text-zinc-400">
@@ -87,13 +89,14 @@ export default function TopBar({ persona, users, region, tupleCount }: Props) {
             }}
           >
             <input type="hidden" name="intent" value="reset" />
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              title="Your data lives only in your browser (PGlite + IndexedDB). Reset rebuilds the seed."
-            >
-              ↻ Reset world
-            </button>
+            <InfoTip label="Your data lives only in your browser (PGlite + IndexedDB). Reset rebuilds the seeded world.">
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+              >
+                ↻ Reset world
+              </button>
+            </InfoTip>
           </Form>
         </div>
       </div>

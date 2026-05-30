@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import Inspector from "../components/Inspector";
 import TopBar from "../components/TopBar";
+import { TooltipProvider } from "../components/ui/tooltip";
 import Workspace from "../components/Workspace";
 import {
   type DocSchema,
@@ -663,42 +664,44 @@ export default function Home() {
   const [params] = useSearchParams();
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <TopBar
-        persona={ld.persona}
-        users={ld.users}
-        region={ld.region}
-        tupleCount={ld.allTuples.length}
-      />
-      {flash?.message && (
-        <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-700">
-          {flash.message}
-        </div>
-      )}
-      {flash?.error && (
-        <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-center text-sm text-rose-700">
-          {flash.error}
-        </div>
-      )}
-      <div
-        className={`mx-auto grid max-w-[1400px] grid-cols-1 gap-0 lg:grid-cols-[300px_1fr] ${
-          ld.inspect ? "sm:pr-[440px]" : ""
-        }`}
-      >
-        <Workspace
+    <TooltipProvider>
+      <div className="min-h-screen bg-zinc-50 text-zinc-900">
+        <TopBar
           persona={ld.persona}
-          entities={ld.entities}
-          opened={ld.opened}
-          openKey={params.get("open")}
-        />
-      </div>
-      {ld.inspect && (
-        <Inspector
-          persona={ld.persona}
-          inspect={ld.inspect}
+          users={ld.users}
           region={ld.region}
+          tupleCount={ld.allTuples.length}
         />
-      )}
-    </div>
+        {flash?.message && (
+          <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-700">
+            {flash.message}
+          </div>
+        )}
+        {flash?.error && (
+          <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-center text-sm text-rose-700">
+            {flash.error}
+          </div>
+        )}
+        <div
+          className={`mx-auto grid max-w-[1400px] grid-cols-1 gap-0 lg:grid-cols-[300px_1fr] ${
+            ld.inspect ? "sm:pr-[440px]" : ""
+          }`}
+        >
+          <Workspace
+            persona={ld.persona}
+            entities={ld.entities}
+            opened={ld.opened}
+            openKey={params.get("open")}
+          />
+        </div>
+        {ld.inspect && (
+          <Inspector
+            persona={ld.persona}
+            inspect={ld.inspect}
+            region={ld.region}
+          />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
