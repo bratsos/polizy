@@ -13,6 +13,7 @@ import TopBar from "../components/TopBar";
 import { TooltipProvider } from "../components/ui/tooltip";
 import Workspace from "../components/Workspace";
 import {
+  authzFromSnapshot,
   type DocSchema,
   everyone,
   FIELD_CONTENT,
@@ -152,7 +153,7 @@ export async function clientLoader({ request }: ClientLoaderFunctionArgs) {
   // The whole authorization story runs right here in the browser: a real
   // Postgres (PGlite) in this visitor's IndexedDB, with the polizy engine on
   // top. Nothing is shared with anyone else.
-  const { db, authz } = await getDb();
+  const { db } = await getDb();
 
   const url = new URL(request.url);
   const persona = USERS.includes(url.searchParams.get("as") ?? "")
@@ -184,10 +185,10 @@ export async function clientLoader({ request }: ClientLoaderFunctionArgs) {
       db.query<DbTuple>("SELECT * FROM polizy_tuple ORDER BY created_at, id"),
     ]);
 
-  // Every check below runs against the PGlite-backed engine directly. The reads
-  // are batched per operation (one broadened range read per subject/object/
-  // relation, reused across the operation), so a page of checks costs a handful
-  // of round-trips, not one per graph edge — no in-memory snapshot needed.
+  // The page's read checks run against an in-memory snapshot of the tuples we
+  // just loaded (one PGlite read, then everything resolves in memory). PGlite
+  // remains the source of truth for writes. See authzFromSnapshot.
+  const authz = await authzFromSnapshot(tuplesRes.rows);
 
   // Hierarchy edges (document -> folder) come straight from the `parent` tuples.
   const parentOf = new Map<string, string>();
