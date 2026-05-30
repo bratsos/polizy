@@ -1,4 +1,4 @@
-import type { StorageAdapter } from "./polizy.storage";
+import type { ReadOnlyStorage, StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
   Condition,
@@ -25,6 +25,15 @@ type PrismaClientLike = {
     findMany(args: any): Promise<any[]>;
   };
 };
+
+/** The `findMany` delegate, available both on the client and inside a tx. */
+type TupleDelegate = { findMany(args: any): Promise<any[]> };
+
+/** Prisma's interactive (callback) transaction form, used for snapshot reads. */
+type InteractiveTransaction = <R>(
+  fn: (tx: { polizyTuple: TupleDelegate }) => Promise<R>,
+  options?: { isolationLevel?: string },
+) => Promise<R>;
 
 /**
  * Revive a condition read from a JSON column. JSON does not preserve `Date`, so
@@ -55,11 +64,102 @@ function mapPrismaTupleToStoredTuple<
   };
 }
 
+// Read queries, parameterised by the `polizyTuple` delegate so the live client
+// and a transaction-scoped snapshot resolve reads through the same code.
+
+async function queryTuples<S extends SubjectType, O extends ObjectType>(
+  tuple: TupleDelegate,
+  filter: Partial<InputTuple<S, O>>,
+  options?: { limit?: number; offset?: number },
+): Promise<StoredTuple<S, O>[]> {
+  const whereClause: any = {};
+  if (filter.subject) {
+    whereClause.subjectType = filter.subject.type;
+    whereClause.subjectId = filter.subject.id;
+  }
+  if (filter.relation) {
+    whereClause.relation = filter.relation;
+  }
+  if (filter.object) {
+    whereClause.objectType = filter.object.type;
+    whereClause.objectId = filter.object.id;
+  }
+  if (filter.condition !== undefined) {
+    whereClause.condition = filter.condition;
+  } else if (Object.hasOwn(filter, "condition")) {
+    whereClause.condition = null;
+  }
+
+  const results = await tuple.findMany({
+    where: whereClause,
+    ...(options?.offset !== undefined ? { skip: options.offset } : {}),
+    ...(options?.limit !== undefined ? { take: options.limit } : {}),
+    orderBy: { id: "asc" },
+  });
+  return results.map(mapPrismaTupleToStoredTuple) as StoredTuple<S, O>[];
+}
+
+async function querySubjects<S extends SubjectType, O extends ObjectType>(
+  tuple: TupleDelegate,
+  object: AnyObject<O>,
+  relation: Relation,
+  options?: { subjectType?: S },
+): Promise<Subject<S>[]> {
+  const results = await tuple.findMany({
+    where: {
+      objectType: object.type,
+      objectId: object.id,
+      relation: relation,
+      ...(options?.subjectType && { subjectType: options.subjectType }),
+    },
+    distinct: ["subjectType", "subjectId"],
+    select: { subjectType: true, subjectId: true },
+  });
+  return results.map((r: { subjectType: string; subjectId: string }) => ({
+    type: r.subjectType as S,
+    id: r.subjectId,
+  }));
+}
+
+async function queryObjects<S extends SubjectType, O extends ObjectType>(
+  tuple: TupleDelegate,
+  subject: Subject<S>,
+  relation: Relation,
+  options?: { objectType?: O },
+): Promise<AnyObject<O>[]> {
+  const results = await tuple.findMany({
+    where: {
+      subjectType: subject.type,
+      subjectId: subject.id,
+      relation: relation,
+      ...(options?.objectType && { objectType: options.objectType }),
+    },
+    distinct: ["objectType", "objectId"],
+    select: { objectType: true, objectId: true },
+  });
+  return results.map((r: { objectType: string; objectId: string }) => ({
+    type: r.objectType as O,
+    id: r.objectId,
+  }));
+}
+
 export function PrismaAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
->(prisma: PrismaClientLike): StorageAdapter<S, O> {
+>(
+  prisma: PrismaClientLike,
+  options?: {
+    /**
+     * Isolation level for {@link StorageAdapter.withSnapshot}. With Postgres use
+     * `"RepeatableRead"` — MVCC means readers never block writers and writers
+     * never block readers. SQLite ignores isolation levels (its read
+     * transaction is already a snapshot), so leave it unset there.
+     */
+    snapshotIsolationLevel?: string;
+  },
+): StorageAdapter<S, O> {
   const p = prisma;
+  const snapshotIsolationLevel = options?.snapshotIsolationLevel;
 
   return {
     async write(tuples: InputTuple<S, O>[]): Promise<StoredTuple<S, O>[]> {
@@ -128,87 +228,52 @@ export function PrismaAdapter<
       return result.count;
     },
 
-    async findTuples(
+    findTuples(
       filter: Partial<InputTuple<S, O>>,
-      options?: { limit?: number; offset?: number },
+      opts?: { limit?: number; offset?: number },
     ): Promise<StoredTuple<S, O>[]> {
-      const whereClause: any = {};
-      if (filter.subject) {
-        whereClause.subjectType = filter.subject.type;
-        whereClause.subjectId = filter.subject.id;
-      }
-
-      if (filter.relation) {
-        whereClause.relation = filter.relation;
-      }
-
-      if (filter.object) {
-        whereClause.objectType = filter.object.type;
-        whereClause.objectId = filter.object.id;
-      }
-
-      if (filter.condition !== undefined) {
-        whereClause.condition = filter.condition;
-      } else if (Object.hasOwn(filter, "condition")) {
-        whereClause.condition = null;
-      }
-
-      const results = await p.polizyTuple.findMany({
-        where: whereClause,
-        ...(options?.offset !== undefined ? { skip: options.offset } : {}),
-        ...(options?.limit !== undefined ? { take: options.limit } : {}),
-        orderBy: { id: "asc" },
-      });
-      return results.map(mapPrismaTupleToStoredTuple) as StoredTuple<S, O>[];
+      return queryTuples<S, O>(p.polizyTuple, filter, opts);
     },
 
-    async findSubjects(
+    findSubjects(
       object: AnyObject<O>,
       relation: Relation,
-      options?: { subjectType?: S },
+      opts?: { subjectType?: S },
     ): Promise<Subject<S>[]> {
-      const results = await p.polizyTuple.findMany({
-        where: {
-          objectType: object.type,
-          objectId: object.id,
-          relation: relation,
-          ...(options?.subjectType && { subjectType: options.subjectType }),
-        },
-        distinct: ["subjectType", "subjectId"],
-        select: {
-          subjectType: true,
-          subjectId: true,
-        },
-      });
-
-      return results.map((r: { subjectType: string; subjectId: string }) => ({
-        type: r.subjectType as S,
-        id: r.subjectId,
-      }));
+      return querySubjects<S, O>(p.polizyTuple, object, relation, opts);
     },
 
-    async findObjects(
+    findObjects(
       subject: Subject<S>,
       relation: Relation,
-      options?: { objectType?: O },
+      opts?: { objectType?: O },
     ): Promise<AnyObject<O>[]> {
-      const results = await p.polizyTuple.findMany({
-        where: {
-          subjectType: subject.type,
-          subjectId: subject.id,
-          relation: relation,
-          ...(options?.objectType && { objectType: options.objectType }),
-        },
-        distinct: ["objectType", "objectId"],
-        select: {
-          objectType: true,
-          objectId: true,
-        },
-      });
-      return results.map((r: { objectType: string; objectId: string }) => ({
-        type: r.objectType as O,
-        id: r.objectId,
-      }));
+      return queryObjects<S, O>(p.polizyTuple, subject, relation, opts);
+    },
+
+    /**
+     * Run `fn` inside one interactive transaction so every read sees the same
+     * snapshot. Postgres with `snapshotIsolationLevel: "RepeatableRead"` gives
+     * true MVCC point-in-time reads without blocking writers; SQLite's read
+     * transaction is a snapshot already.
+     */
+    withSnapshot<T>(fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>) {
+      // Call through `p.$transaction` (not a detached local) so Prisma keeps
+      // its `this` binding; the cast only selects the interactive overload.
+      return (p.$transaction as unknown as InteractiveTransaction)(
+        (tx) =>
+          fn({
+            findTuples: (filter, opts) =>
+              queryTuples<S, O>(tx.polizyTuple, filter, opts),
+            findSubjects: (object, relation, opts) =>
+              querySubjects<S, O>(tx.polizyTuple, object, relation, opts),
+            findObjects: (subject, relation, opts) =>
+              queryObjects<S, O>(tx.polizyTuple, subject, relation, opts),
+          }),
+        snapshotIsolationLevel
+          ? { isolationLevel: snapshotIsolationLevel }
+          : undefined,
+      );
     },
   };
 }

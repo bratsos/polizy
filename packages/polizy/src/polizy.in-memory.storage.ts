@@ -1,5 +1,5 @@
 import { deepEqual } from "fast-equals";
-import type { StorageAdapter } from "./polizy.storage";
+import type { ReadOnlyStorage, StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
   InputTuple,
@@ -11,6 +11,101 @@ import type {
   TupleId,
 } from "./types";
 
+// Read scans, parameterised by the tuple store so the live adapter and a
+// point-in-time snapshot resolve reads through exactly the same code.
+
+function matchesFilter<S extends SubjectType, O extends ObjectType>(
+  tuple: StoredTuple<S, O>,
+  filter: {
+    who?: Subject<S> | AnyObject<O>;
+    was?: Relation;
+    onWhat?: AnyObject<O>;
+  },
+): boolean {
+  if (filter.who && !deepEqual(tuple.subject, filter.who)) {
+    return false;
+  }
+  if (filter.was && tuple.relation !== filter.was) {
+    return false;
+  }
+  if (filter.onWhat && !deepEqual(tuple.object, filter.onWhat)) {
+    return false;
+  }
+  return true;
+}
+
+function readTuples<S extends SubjectType, O extends ObjectType>(
+  tuples: Map<TupleId, StoredTuple<S, O>>,
+  filter: Partial<InputTuple<S, O>>,
+  options?: { limit?: number; offset?: number },
+): StoredTuple<S, O>[] {
+  const results: StoredTuple<S, O>[] = [];
+  const adaptedFilter = {
+    who: filter.subject,
+    was: filter.relation,
+    onWhat: filter.object,
+  };
+  for (const tuple of tuples.values()) {
+    if (matchesFilter(tuple, adaptedFilter)) {
+      if (filter.condition && !deepEqual(tuple.condition, filter.condition)) {
+        continue;
+      }
+      results.push(tuple);
+    }
+  }
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? Number.POSITIVE_INFINITY;
+  return results.slice(offset, offset + limit);
+}
+
+function readSubjects<S extends SubjectType, O extends ObjectType>(
+  tuples: Map<TupleId, StoredTuple<S, O>>,
+  object: AnyObject<O>,
+  relation: Relation,
+  options?: { subjectType?: S },
+): Subject<S>[] {
+  const subjects: Subject<S>[] = [];
+  const seenSubjects = new Set<string>();
+  for (const tuple of tuples.values()) {
+    if (
+      tuple.relation === relation &&
+      deepEqual(tuple.object, object) &&
+      (!options?.subjectType || tuple.subject.type === options.subjectType)
+    ) {
+      const subjectKey = `${tuple.subject.type}:${tuple.subject.id}`;
+      if (!seenSubjects.has(subjectKey)) {
+        subjects.push(tuple.subject as Subject<S>);
+        seenSubjects.add(subjectKey);
+      }
+    }
+  }
+  return subjects;
+}
+
+function readObjects<S extends SubjectType, O extends ObjectType>(
+  tuples: Map<TupleId, StoredTuple<S, O>>,
+  subject: Subject<S>,
+  relation: Relation,
+  options?: { objectType?: O },
+): AnyObject<O>[] {
+  const objects: AnyObject<O>[] = [];
+  const seenObjects = new Set<string>();
+  for (const tuple of tuples.values()) {
+    if (
+      tuple.relation === relation &&
+      deepEqual(tuple.subject, subject) &&
+      (!options?.objectType || tuple.object.type === options.objectType)
+    ) {
+      const objectKey = `${tuple.object.type}:${tuple.object.id}`;
+      if (!seenObjects.has(objectKey)) {
+        objects.push(tuple.object as AnyObject<O>);
+        seenObjects.add(objectKey);
+      }
+    }
+  }
+  return objects;
+}
+
 export class InMemoryStorageAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
@@ -21,29 +116,6 @@ export class InMemoryStorageAdapter<
 
   private generateId(): TupleId {
     return (this.nextId++).toString();
-  }
-
-  private matchesFilter(
-    tuple: StoredTuple<S, O>,
-    filter: {
-      who?: Subject<S> | AnyObject<O>;
-      was?: Relation;
-      onWhat?: AnyObject<O>;
-    },
-  ) {
-    if (filter.who && !deepEqual(tuple.subject, filter.who)) {
-      return false;
-    }
-
-    if (filter.was && tuple.relation !== filter.was) {
-      return false;
-    }
-
-    if (filter.onWhat && !deepEqual(tuple.object, filter.onWhat)) {
-      return false;
-    }
-
-    return true;
   }
 
   private findExisting(
@@ -132,25 +204,7 @@ export class InMemoryStorageAdapter<
     filter: Partial<InputTuple<S, O>>,
     options?: { limit?: number; offset?: number },
   ) {
-    const results: StoredTuple<S, O>[] = [];
-
-    const adaptedFilter = {
-      who: filter.subject,
-      was: filter.relation,
-      onWhat: filter.object,
-    };
-    for (const tuple of this.tuples.values()) {
-      if (this.matchesFilter(tuple, adaptedFilter)) {
-        if (filter.condition && !deepEqual(tuple.condition, filter.condition)) {
-          continue;
-        }
-        results.push(tuple);
-      }
-    }
-
-    const offset = options?.offset ?? 0;
-    const limit = options?.limit ?? Number.POSITIVE_INFINITY;
-    return results.slice(offset, offset + limit);
+    return readTuples(this.tuples, filter, options);
   }
 
   async findSubjects(
@@ -158,23 +212,7 @@ export class InMemoryStorageAdapter<
     relation: Relation,
     options?: { subjectType?: S },
   ): Promise<Subject<S>[]> {
-    const subjects: Subject<S>[] = [];
-    const seenSubjects = new Set<string>();
-
-    for (const tuple of this.tuples.values()) {
-      if (
-        tuple.relation === relation &&
-        deepEqual(tuple.object, object) &&
-        (!options?.subjectType || tuple.subject.type === options.subjectType)
-      ) {
-        const subjectKey = `${tuple.subject.type}:${tuple.subject.id}`;
-        if (!seenSubjects.has(subjectKey)) {
-          subjects.push(tuple.subject as Subject<S>);
-          seenSubjects.add(subjectKey);
-        }
-      }
-    }
-    return subjects;
+    return readSubjects(this.tuples, object, relation, options);
   }
 
   async findObjects(
@@ -182,22 +220,30 @@ export class InMemoryStorageAdapter<
     relation: Relation,
     options?: { objectType?: O },
   ): Promise<AnyObject<O>[]> {
-    const objects: AnyObject<O>[] = [];
-    const seenObjects = new Set<string>();
+    return readObjects(this.tuples, subject, relation, options);
+  }
 
-    for (const tuple of this.tuples.values()) {
-      if (
-        tuple.relation === relation &&
-        deepEqual(tuple.subject, subject) &&
-        (!options?.objectType || tuple.object.type === options.objectType)
-      ) {
-        const objectKey = `${tuple.object.type}:${tuple.object.id}`;
-        if (!seenObjects.has(objectKey)) {
-          objects.push(tuple.object as AnyObject<O>);
-          seenObjects.add(objectKey);
-        }
-      }
+  /**
+   * Run `fn` against a point-in-time copy of the tuples. A write that lands
+   * while `fn` is in flight mutates the live map (and can edit a live tuple's
+   * condition in place); copying each tuple isolates the operation from both,
+   * so it sees one coherent view without blocking writers.
+   */
+  async withSnapshot<T>(
+    fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>,
+  ): Promise<T> {
+    const snapshot = new Map<TupleId, StoredTuple<S, O>>();
+    for (const [id, tuple] of this.tuples) {
+      snapshot.set(id, { ...tuple });
     }
-    return objects;
+    const reader: ReadOnlyStorage<S, O> = {
+      findTuples: async (filter, options) =>
+        readTuples(snapshot, filter, options),
+      findSubjects: async (object, relation, options) =>
+        readSubjects(snapshot, object, relation, options),
+      findObjects: async (subject, relation, options) =>
+        readObjects(snapshot, subject, relation, options),
+    };
+    return fn(reader);
   }
 }

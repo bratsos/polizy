@@ -131,10 +131,10 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
      */
     consistency?: "default" | "strong";
   }): Promise<boolean> {
-    return this.withReader(
-      (reader) => this.resolveCheck(request, reader),
-      this.toContextual(request.contextualTuples),
-    );
+    return this.withReader((reader) => this.resolveCheck(request, reader), {
+      contextual: this.toContextual(request.contextualTuples),
+      consistency: request.consistency,
+    });
   }
 
   /** Resolve one check against a given (per-operation) reader. */
@@ -173,10 +173,19 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     fn: (
       reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
     ) => Promise<T>,
-    contextual: StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[] = [],
+    options: {
+      contextual?: StoredTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[];
+      consistency?: "default" | "strong";
+    } = {},
   ): Promise<T> {
+    const { contextual = [], consistency = "default" } = options;
     const storage = this.storage;
-    if (storage.withSnapshot) {
+    // "strong" pins every read in the operation to one point-in-time snapshot
+    // (when the adapter supports it) — full consistency at the cost of a
+    // read transaction. "default" reads live: still consistent per broadened
+    // key thanks to the ReadCache, just not across keys, and with no snapshot
+    // overhead on the hot path.
+    if (consistency === "strong" && storage.withSnapshot) {
       return storage.withSnapshot((snap) =>
         fn(new ReadCache(snap, contextual)),
       );
@@ -221,11 +230,14 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       onWhat: AnyObject<SchemaObjectTypes<S>>;
       context?: Record<string, unknown>;
     }>,
+    options?: { consistency?: "default" | "strong" },
   ): Promise<boolean[]> {
     // One shared reader (and snapshot) across the batch: overlapping reads —
     // a subject's grants, a folder's hierarchy — are fetched once for all.
-    return this.withReader((reader) =>
-      Promise.all(requests.map((r) => this.resolveCheck(r, reader))),
+    return this.withReader(
+      (reader) =>
+        Promise.all(requests.map((r) => this.resolveCheck(r, reader))),
+      { consistency: options?.consistency },
     );
   }
 
