@@ -242,6 +242,28 @@ await authz.listTuples({ subject: { type: "user", id: "alice" } }, { limit: 50, 
 
 `listAccessibleObjects` scales with the subject's reachable set (no full-table scan).
 
+## Consistency & read-after-write
+
+Every operation reads through a per-operation layer that fetches broad range reads once and resolves in memory — so a check that revisits the same subject or object many times hits storage a handful of times, not once per edge. `checkMany` shares one reader across the whole batch.
+
+By default reads are live (each broadened range read is internally consistent, but the operation isn't pinned to a single instant). For a coherent point-in-time view, pass `consistency: "strong"` — every read in the operation comes from one snapshot, **without blocking writers**:
+
+```ts
+await authz.check({ who, canThey: "edit", onWhat, consistency: "strong" });
+await authz.checkMany(requests, { consistency: "strong" });
+```
+
+`"strong"` is served by the adapter's optional `withSnapshot`: the in-memory adapter copies the tuple set; the Prisma adapter runs the whole operation in one transaction — pass `PrismaAdapter(prisma, { snapshotIsolationLevel: "RepeatableRead" })` for Postgres MVCC (readers never block writers, writers never block readers). Adapters that don't implement it fall back to live reads.
+
+**Read-your-writes without a round-trip:** pass freshly written (or not-yet-committed) facts as `contextualTuples`. They're evaluated as if stored, and never persisted:
+
+```ts
+await authz.check({
+  who, canThey: "view", onWhat: doc,
+  contextualTuples: [{ subject: who, relation: "viewer", object: doc }],
+}); // true, even before the grant is committed
+```
+
 ## Field-level permissions
 
 For object types listed in `fieldLevelObjects`, an id may carry a field after the separator (default `#`): `document:doc1#summary`. A grant on the **base** object (`doc1`) authorizes its fields (`doc1#summary`) via direct, group, **and** hierarchy paths, while a grant on a specific field stays scoped to that field.
@@ -258,13 +280,13 @@ Field ids are validated on write (empty base or empty field throws), and types *
 
 ## Custom storage adapters
 
-Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package ships a shared contract test suite you can run against your adapter.
+Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package ships a shared contract test suite you can run against your adapter. Optionally implement `withSnapshot` to enable `consistency: "strong"` (see [Consistency & read-after-write](#consistency--read-after-write)); without it, strong checks transparently fall back to live reads.
 
 ## Limitations
 
 * **Grants-only.** No deny tuples; model exceptions with narrower relations/objects.
 * **Conditions** cover time windows and attribute predicates — not a full policy language.
-* **No consistency tokens.** As an in-process library reading your own store, `polizy` doesn't implement Zanzibar "zookies"/new-enemy protection; reads reflect committed tuples.
+* **No consistency tokens (yet).** `consistency: "strong"` pins one operation to a point-in-time snapshot, and `contextualTuples` give read-your-writes — but there are no Zanzibar "zookies"/new-enemy protection *across* operations. That layer is deferred until `polizy` grows caching/replicas that make it meaningful; today reads reflect committed tuples.
 
 ## Migrating from 0.2.x → 0.3.0
 
