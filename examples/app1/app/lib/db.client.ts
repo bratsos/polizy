@@ -1,15 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
-import {
-  AuthSystem,
-  defineSchema,
-  everyone,
-  InMemoryStorageAdapter,
-} from "polizy";
-import {
-  createPGliteAdapter,
-  POLIZY_TUPLE_DDL,
-  reviveCondition,
-} from "./pglite-adapter";
+import { AuthSystem, defineSchema, everyone } from "polizy";
+import { createPGliteAdapter, POLIZY_TUPLE_DDL } from "./pglite-adapter";
 
 /**
  * THE AUTHORIZATION MODEL
@@ -88,46 +79,6 @@ export function makeAuthz(db: PGlite) {
 }
 
 export type Authz = ReturnType<typeof makeAuthz>;
-
-type TupleRow = {
-  subject_type: string;
-  subject_id: string;
-  relation: string;
-  object_type: string;
-  object_id: string;
-  condition: unknown;
-};
-
-/**
- * Build a throwaway in-memory authz from an already-loaded tuple snapshot.
- *
- * A single page load runs dozens of `check()`s (per-resource access + the
- * inspector matrix). Against PGlite that's a round-trip to IndexedDB per check —
- * slow. The whole tuple set is tiny, so we snapshot it into memory once and run
- * every read check there instead. PGlite stays the source of truth; *writes*
- * still go through `getDb().authz`, and the next load re-snapshots the result.
- */
-export async function authzFromSnapshot(rows: TupleRow[]): Promise<Authz> {
-  const mem = new InMemoryStorageAdapter<
-    "user" | "team",
-    "document" | "folder" | "team"
-  >();
-  await mem.write(
-    rows.map((r) => {
-      const condition = reviveCondition(r.condition);
-      return {
-        subject: { type: r.subject_type as "user" | "team", id: r.subject_id },
-        relation: r.relation,
-        object: {
-          type: r.object_type as "document" | "folder" | "team",
-          id: r.object_id,
-        },
-        ...(condition ? { condition } : {}),
-      };
-    }),
-  );
-  return new AuthSystem({ schema: docSchema, storage: mem });
-}
 
 const DOCUMENTS = [
   {
