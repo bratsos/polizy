@@ -1,0 +1,12 @@
+{
+  "extends": "../../packages/polizy/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "rootDir": "../../",
+    "lib": ["esnext", "dom"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0"
+  }
+}

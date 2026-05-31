@@ -41,3 +41,6 @@ dev.db
 
 # Internal design / planning documents (keep out of the repo)
 /docs/
+
+# Docusaurus generated api docs
+apps/docs/docs/api/
