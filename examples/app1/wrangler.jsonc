@@ -7,8 +7,14 @@
   // `build/client/` (including an `index.html` shell and the PGlite .wasm/.data
   // assets), so this is an "assets-only" Worker — there is no `main` entrypoint.
   //
-  // Deploy:  pnpm run deploy    (builds, then `wrangler deploy`)
-  // Preview: pnpm run preview   (builds, then `wrangler dev` — serves the assets locally)
+  // Deploy:  pnpm run cf-deploy    (builds, then `wrangler deploy`)
+  // Preview: pnpm run cf-preview   (builds, then `wrangler dev` — serves the assets locally)
+  //
+  // NOTE: the scripts are named `cf-deploy`/`cf-preview`, NOT `deploy`, because
+  // `pnpm deploy` is a reserved built-in command. A script literally named
+  // `deploy` is shadowed when Cloudflare runs `pnpm --filter example-app1 deploy`,
+  // which fails with ERR_PNPM_INVALID_DEPLOY_TARGET. Set the Cloudflare deploy
+  // command to: pnpm --filter example-app1 run cf-deploy
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "polizy-demo",
   "compatibility_date": "2025-09-23",
