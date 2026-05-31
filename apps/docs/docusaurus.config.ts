@@ -5,8 +5,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'My Site',
-  tagline: 'Dinosaurs are cool',
+  title: 'polizy',
+  tagline: 'Zanzibar-inspired authorization for TypeScript & Node.js',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -14,16 +14,14 @@ const config: Config = {
     v4: true, // Improve compatibility with the upcoming Docusaurus v4
   },
 
-  // Set the production url of your site here
-  url: 'https://your-docusaurus-site.example.com',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
+  // Set the production url of your site here.
+  // TODO: confirm the final docs domain (assumed polizy.dev).
+  url: 'https://polizy.dev',
+  // Set the /<baseUrl>/ pathname under which your site is served.
   baseUrl: '/',
 
-  // GitHub pages deployment config.
-  // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'facebook', // Usually your GitHub org/user name.
-  projectName: 'docusaurus', // Usually your repo name.
+  organizationName: 'bratsos',
+  projectName: 'polizy',
 
   onBrokenLinks: 'throw',
 
@@ -41,10 +39,9 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
+          routeBasePath: '/',
           editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+            'https://github.com/bratsos/polizy/tree/main/apps/docs/',
         },
         blog: false,
         theme: {
@@ -71,15 +68,14 @@ const config: Config = {
   ],
 
   themeConfig: {
-    // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
     colorMode: {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'My Site',
+      title: 'polizy',
       logo: {
-        alt: 'My Site Logo',
+        alt: 'polizy logo',
         src: 'img/logo.svg',
       },
       items: [
@@ -87,10 +83,15 @@ const config: Config = {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
-          label: 'Tutorial',
+          label: 'Docs',
         },
         {
-          href: 'https://github.com/facebook/docusaurus',
+          to: '/api/',
+          label: 'API Reference',
+          position: 'left',
+        },
+        {
+          href: 'https://github.com/bratsos/polizy',
           label: 'GitHub',
           position: 'right',
         },
@@ -103,25 +104,25 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Getting Started',
-              to: '/docs/getting-started/introduction',
+              label: 'Introduction',
+              to: '/',
+            },
+            {
+              label: 'Quickstart',
+              to: '/getting-started/quickstart',
+            },
+            {
+              label: 'API Reference',
+              to: '/api/',
             },
           ],
         },
         {
-          title: 'Community',
+          title: 'Try it',
           items: [
             {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-            },
-            {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
-            },
-            {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
+              label: 'Live Demo',
+              to: '/getting-started/live-demo',
             },
           ],
         },
@@ -130,12 +131,16 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/bratsos/polizy',
+            },
+            {
+              label: 'npm',
+              href: 'https://www.npmjs.com/package/polizy',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} polizy. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
