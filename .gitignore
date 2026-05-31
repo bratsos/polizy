@@ -2,11 +2,15 @@
 node_modules
 .pnpm-store/
 
+# Antigravity CLI (agy) working directory
+.antigravitycli/
+
 # Build output directories (based on tsconfig)
 packages/*/dist/
 examples/*/dist/
 *.tsbuildinfo
 build/
+.docusaurus/
 
 # Logs
 *.log
