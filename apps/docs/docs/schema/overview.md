@@ -86,8 +86,10 @@ relations: {
 }
 ```
 
-:::tip Multiple Group or Hierarchy Relations
+:::tip[Multiple Group or Hierarchy Relations]
+
 You are not limited to just one relation of each type! You can declare multiple group relations (such as `member` and `orgMember`) or multiple hierarchy relations (such as `folderParent` and `orgParent`). polizy's engine will automatically traverse all of them when running a check.
+
 :::
 
 For a deeper dive into relations and how they compare to actions, check out [Relations and Actions](../core-concepts/relations-and-actions.md).

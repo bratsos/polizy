@@ -13,8 +13,10 @@ polizy solves this with **Read-Your-Writes** validation using `contextualTuples`
 
 This guide shows you how to pass temporary, uncommitted facts directly to a permission check.
 
-:::note Performance & Consistency
+:::note[Performance & Consistency]
+
 To learn about how polizy caches reads, wraps operations in scopes, and implements strong consistency levels, read **[Consistency & Caching](../performance/consistency.md)**.
+
 :::
 
 ## The Solution: `contextualTuples`

@@ -20,6 +20,8 @@ Learn how to model common authorization patterns in your application using poliz
 - **[Read Your Writes](./read-your-writes.md)** — Handle cache consistency and transaction boundaries for immediate permission updates.
 - **[Framework Integration](./framework-integration.md)** — Plug polizy into web frameworks, APIs, and middleware.
 
-:::tip Need the basics first?
+:::tip[Need the basics first?]
+
 If you are new to polizy, we recommend checking out **[Core Concepts](../core-concepts/overview.md)** and the **[Quickstart](../getting-started/quickstart.md)** to get comfortable with subjects, relations, and objects.
+
 :::

@@ -60,8 +60,10 @@ import { InMemoryStorageAdapter } from "polizy";
 const storage = new InMemoryStorageAdapter();
 ```
 
-:::tip Production Storage
+:::tip[Production Storage]
+
 For production environments where you want to persist relationships in a database, check out the [Storage Overview](../storage/overview.md) guide.
+
 :::
 
 ## Verify Your Installation

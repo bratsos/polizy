@@ -27,7 +27,9 @@ npm install --save-dev prisma
 Add the `PolizyTuple` model to your `schema.prisma` file. 
 
 :::warning
+
 You must copy this model structure exactly. The compound `@@unique` constraint is **required** to ensure that granting permissions is idempotent (i.e., writing an existing tuple updates its condition rather than creating a duplicate). The `@@index` fields are critical for query performance.
+
 :::
 
 ```prisma
@@ -70,7 +72,9 @@ npx prisma generate
 Configure the `AuthSystem` with the Prisma adapter. 
 
 :::important
+
 `PrismaStorageAdapter` is a **factory function**, not a class. Call it directly to create the adapter; do not use the `new` keyword.
+
 :::
 
 ```ts

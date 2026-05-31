@@ -9,8 +9,10 @@ In many systems, resources exist inside other containers—like files inside fol
 
 This guide explains how to define hierarchical relations, set up parent-child links, and propagate permissions.
 
-:::note Schema Reference
+:::note[Schema Reference]
+
 For a complete overview of schema definition fields and properties, see the **[Schema Reference](../schema/schema-reference.md)**.
+
 :::
 
 ## 1. Configure the schema
@@ -113,8 +115,10 @@ const canViewAfter = await authz.check({
 console.log(canViewAfter); // false
 ```
 
-:::tip Moving Resources
+:::tip[Moving Resources]
+
 To move an object to a new parent, run `removeParent` for the old parent and `setParent` for the new parent. Because these operations are lightweight, hierarchy updates resolve instantly.
+
 :::
 
 ---
@@ -159,6 +163,8 @@ await authz.removeParent({
 });
 ```
 
-:::warning Inference Behavior
+:::warning[Inference Behavior]
+
 The `as` parameter is optional and inferred automatically **only** when there is exactly one `hierarchy` relation defined in your schema.
+
 :::

@@ -11,8 +11,10 @@ polizy makes this easy with **Field-Level Permissions**.
 
 This guide shows you how to declare field-level objects in your schema, configure base-vs-field authorization, and protect against accidental leaks.
 
-:::note Theory & Concepts
+:::note[Theory & Concepts]
+
 To learn more about standard permissions and mapping relations to actions, check out **[Relations and Actions](../core-concepts/relations-and-actions.md)**.
+
 :::
 
 ## 1. Configure the Schema

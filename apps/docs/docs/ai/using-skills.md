@@ -28,12 +28,16 @@ Here is a mapping of example developer tasks to the specialized skills that hand
 
 To get the most out of your polizy-equipped agent, keep these tips in mind:
 
-:::tip Use Domain Terminology
+:::tip[Use Domain Terminology]
+
 Use standard polizy vocabulary in your prompts (such as "schema", "relations", "actions", "tuples", and "adapters"). This helps the agent's router match the right skill immediately.
+
 :::
 
-:::note Context Matters
+:::note[Context Matters]
+
 If a check isn't working as expected, paste the schema definition and the relevant relationship tuples directly into the chat session. This allows the `polizy-troubleshooting` skill to trace the exact resolution path.
+
 :::
 
 For further details on how to build specific authorization designs yourself, explore the **[Guides Overview](../guides/overview.md)**.

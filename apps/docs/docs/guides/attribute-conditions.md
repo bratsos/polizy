@@ -11,8 +11,10 @@ polizy supports **Attribute-Based Access Control (ABAC)** by letting you attach 
 
 This guide shows you how to define attribute conditions on your grants and pass context during checks.
 
-:::note Theory & Concepts
+:::note[Theory & Concepts]
+
 To learn more about how polizy evaluates permissions and conditions, check out the **[How Checks Resolve](../core-concepts/how-checks-resolve.md)** page.
+
 :::
 
 ## 1. Granting Access with Attributes
@@ -108,8 +110,10 @@ Requires this attribute condition:
 
 ## 5. Fail-Closed Behavior
 
-:::warning Fail-Closed Security
+:::warning[Fail-Closed Security]
+
 If a check evaluates a grant with an attribute condition, but the required value is missing from the `context` parameter or has a mismatched type, **the condition immediately fails** (fail-closed).
+
 :::
 
 For example:

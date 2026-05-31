@@ -47,7 +47,9 @@ The `PrismaStorageAdapter` persists tuples to your database using your existing 
 If you use a database without a Prisma client (like Redis, DynamoDB, or MongoDB) or need to query tuples through an external API, you can write a custom adapter. Any object that implements the `StorageAdapter` interface can be passed directly to the `AuthSystem` constructor.
 
 :::tip
+
 When writing a custom adapter, you can use polizy's shared test suite to ensure your implementation behaves exactly like the built-in adapters.
+
 :::
 
 ---

@@ -9,8 +9,10 @@ Sometimes you want to make a resource public to every user in your system—like
 
 This guide shows you how to grant access to all subjects of a specific type.
 
-:::note Grants-Only Model
+:::note[Grants-Only Model]
+
 Polizy is a grants-only system. For details on how authorization flows exclusively through positive permissions, see **[Grants-Only System](../core-concepts/grants-only.md)**.
+
 :::
 
 ## 1. Import the `everyone` helper
@@ -67,6 +69,8 @@ const canView = await authz.check({
 console.log(canView); // true
 ```
 
-:::warning Subject Type Constraint
+:::warning[Subject Type Constraint]
+
 `everyone("user")` only matches subjects whose type is exactly `"user"`. If you have other subject types in your schema (e.g., `client` or `partner`), they will not match this wildcard unless you also grant access to `everyone("client")` or `everyone("partner")`.
+
 :::

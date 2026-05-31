@@ -14,8 +14,10 @@ The general integration pattern works in three steps:
 
 This guide shows how to write a generic Express-style middleware and adapt this pattern to any web framework.
 
-:::note Theory & Concepts
+:::note[Theory & Concepts]
+
 To learn more about checking permissions and passing targets, read **[Relations and Actions](../core-concepts/relations-and-actions.md)**.
+
 :::
 
 ## 1. Using `check()` (Boolean Flow)

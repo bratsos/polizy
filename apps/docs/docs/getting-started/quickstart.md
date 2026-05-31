@@ -109,8 +109,10 @@ const schema = defineSchema({
 - **`relations`**: These are the basic facts we can store. In this example, we define three direct relationships: `owner`, `editor`, and `viewer`.
 - **`actionToRelations`**: This maps the actions you want to check (like `view`, `edit`, or `delete`) to the relations that grant them. For example, editing a document requires someone to be either its `editor` or `owner`.
 
-:::tip Schema Safety
+:::tip[Schema Safety]
+
 If you reference a relation in `actionToRelations` that is not defined in `relations`, `defineSchema` will immediately throw a `SchemaError` at startup. This prevents typos and keeps your authorization rules consistent!
+
 :::
 
 ---
@@ -187,8 +189,10 @@ const bobCanView = await authz.check({
 ```
 **Why `true`?** Because Bob is a `viewer` of the readme, and our schema maps the `view` action to the `viewer` relation.
 
-:::note Raising Errors Instead
+:::note[Raising Errors Instead]
+
 If you prefer throwing an error instead of returning a boolean when a check fails, you can use `await authz.checkOrThrow(...)` which will throw a `NotAuthorizedError`.
+
 :::
 
 ---

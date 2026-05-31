@@ -9,8 +9,10 @@ Managing access for individual users can quickly become overwhelming. Instead of
 
 This guide shows you how to define a group relation, add users to groups, and check if members inherit access.
 
-:::note Theory & Concepts
+:::note[Theory & Concepts]
+
 To learn more about how subjects, objects, and relationships work under the hood, read the **[Relations and Actions](../core-concepts/relations-and-actions.md)** guide.
+
 :::
 
 ## 1. Configure the schema
@@ -172,6 +174,8 @@ await authz.removeMember({
 });
 ```
 
-:::warning Inference Behavior
+:::warning[Inference Behavior]
+
 The `as` parameter is optional and inferred automatically **only** when there is exactly one `group` relation defined in your schema.
+
 :::

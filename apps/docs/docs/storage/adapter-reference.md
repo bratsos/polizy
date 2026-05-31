@@ -23,7 +23,9 @@ The `StorageAdapter` interface defines the boundary between the polizy execution
 | **withSnapshot** | `withSnapshot?<T>(fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>): Promise<T>` | *Optional.* Executes a callback within a consistent read-only transaction (snapshot). |
 
 :::note
+
 In the signatures above, `S` represents the union of valid subject types, and `O` represents the union of valid object types, as defined in your schema.
+
 :::
 
 ---

@@ -7,8 +7,10 @@ sidebar_position: 2
 
 To equip your AI coding assistant with the polizy skills, you must copy or link the skill folders from the installed `polizy` npm package into your agent's skills directory.
 
-:::note SKILL.md Convention
+:::note[SKILL.md Convention]
+
 These skills follow the standard `SKILL.md` design pattern. They are fully compatible with Claude Code and any other AI agent that supports `SKILL.md` skill discovery. There is no custom installer, CLI command, plugin marketplace, or postinstall script.
+
 :::
 
 ## Prerequisites
@@ -63,7 +65,9 @@ done
 ```
 
 :::warning
+
 A relative symlink like `ln -s ../node_modules/...` will **not** work here — its target is resolved relative to the link's own location (`.claude/skills/`), not your project root. Use the absolute-path loop above.
+
 :::
 
 ---

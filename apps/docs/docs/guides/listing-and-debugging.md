@@ -13,8 +13,10 @@ Building a secure application requires more than just checking permissions at ru
 
 polizy provides first-class inspection APIs to answer these questions without requiring full-table scans or complex custom queries.
 
-:::note How Checks Resolve
+:::note[How Checks Resolve]
+
 To understand how polizy searches relationship paths to compute these results, read **[How Checks Resolve](../core-concepts/how-checks-resolve.md)**.
+
 :::
 
 ## 1. Listing Accessible Objects (`listAccessibleObjects`)

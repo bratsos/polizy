@@ -9,8 +9,10 @@ Sometimes you need to grant permissions that are short-lived. For example, a cus
 
 This guide shows you how to grant time-boxed permissions using `validSince` and `validUntil`, and explains the database uniqueness rules you must follow.
 
-:::note How Checks Resolve
+:::note[How Checks Resolve]
+
 To learn how polizy evaluates conditions during a permission check, check out the **[How Checks Resolve](../core-concepts/how-checks-resolve.md)** guide.
+
 :::
 
 ## The Coexistence Rule: Use Distinct Relations
@@ -100,6 +102,8 @@ console.log(canView);
 // Returns true if the current time is within the granted window, false otherwise.
 ```
 
-:::warning Timezone and Server Time
+:::warning[Timezone and Server Time]
+
 Polizy uses the local system time of the application server running the code to evaluate `validSince` and `validUntil`. Ensure your application servers have their clocks synchronized (e.g., via NTP).
+
 :::

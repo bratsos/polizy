@@ -40,8 +40,10 @@ A **hierarchy** relation links one object to another object representing its par
 * **Meaning**: `document:doc1` points to its parent `folder:f1`.
 * **How it resolves**: Permissions flow down from the parent object to the child object based on your schema's propagation rules.
 
-:::tip Multi-relation Support
+:::tip[Multi-relation Support]
+
 polizy is not limited to a single group or hierarchy relation. You can declare multiple types (e.g., `member` and `orgMember` for groups, or `folderParent` and `orgParent` for hierarchies). polizy will traverse all defined relations during a check.
+
 :::
 
 ---

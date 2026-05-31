@@ -19,8 +19,10 @@ Every authorization query in polizy executes through a specialized, per-operatio
 *   **Per-Check Memoization**: Within a single query, polizy caches sub-graph traversal results. If a check traverses the same subject, object, or relation along different evaluation paths, it hits your storage database only a handful of times, rather than querying it once for every single edge.
 *   **Shared Batch Reads**: When checking multiple permissions at once using `checkMany`, polizy shares a single reader instance across the entire batch, collapsing what would be dozens of separate database calls into a few optimized queries.
 
-:::tip Why wide and deep graphs stay cheap
+:::tip[Why wide and deep graphs stay cheap]
+
 Because polizy resolves path expansions (like nested groups or folder inheritance) in memory after fetching range blocks, the complexity of walking deep trees scales with the size of the retrieved tuple set, not the number of database queries.
+
 :::
 
 ---

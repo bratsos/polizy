@@ -11,8 +11,10 @@ polizy provides target-oriented APIs for removing permission tuples: `disallowAl
 
 This guide walks you through the common scenarios for revoking access.
 
-:::note Theory & Concepts
+:::note[Theory & Concepts]
+
 Because polizy only stores positive assertions (grants), revoking access is done by deleting those stored tuples. To understand this design decision, read **[Grants-Only Authorization](../core-concepts/grants-only.md)**.
+
 :::
 
 ## 1. Direct Revocation with `disallowAllMatching`
@@ -68,7 +70,8 @@ await authz.removeMember({
 });
 ```
 
-:::tip Multiple Group Relations
+:::tip[Multiple Group Relations]
+
 If your schema defines multiple relations between a member and a group, you must pass the `as` parameter to specify which relationship to remove:
 ```ts
 await authz.removeMember({
@@ -78,6 +81,7 @@ await authz.removeMember({
 });
 ```
 If there is only one relation configured between the subject type and the group type, polizy infers it automatically.
+
 :::
 
 ---
@@ -94,7 +98,8 @@ await authz.removeParent({
 });
 ```
 
-:::tip Multiple Hierarchy Relations
+:::tip[Multiple Hierarchy Relations]
+
 Similar to groups, if there are multiple hierarchical relations possible between the child and parent, specify which one to remove using the `as` parameter:
 ```ts
 await authz.removeParent({
@@ -103,4 +108,5 @@ await authz.removeParent({
   as: "direct_parent",
 });
 ```
+
 :::

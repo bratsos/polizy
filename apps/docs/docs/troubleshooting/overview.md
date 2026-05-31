@@ -7,7 +7,8 @@ sidebar_position: 1
 
 If polizy isn't behaving as you expect, don't worry. This guide covers the most common gotchas, error messages, and configuration issues you might encounter.
 
-:::tip First Step: Use `explain()`
+:::tip[First Step: Use `explain()`]
+
 When a permission check returns an unexpected result, your first tool should always be the `explain()` API. It traces the exact evaluation path polizy took to compute its decision:
 
 ```ts
@@ -21,6 +22,7 @@ console.log(explanation);
 // Traces the graph path or shows why evaluation stopped
 ```
 For details on interpreting traces, see [Listing & Debugging](../guides/listing-and-debugging.md).
+
 :::
 
 ---
