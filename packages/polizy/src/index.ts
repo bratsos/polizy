@@ -1,3 +1,7 @@
+/**
+ * @module polizy
+ */
+
 export { isConditionValid } from "./conditions";
 export * from "./polizy";
 export { InMemoryStorageAdapter } from "./polizy.in-memory.storage";

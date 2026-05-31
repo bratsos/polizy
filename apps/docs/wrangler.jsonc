@@ -1,0 +1,20 @@
+{
+  // Cloudflare Workers — Static Assets (this is Workers, NOT Pages).
+  // Docusaurus is a static site generator: `pnpm run build` emits fully static
+  // HTML to ./build (a real HTML file per route plus a generated 404.html), so
+  // this is an assets-only Worker with no `main` entrypoint.
+  //
+  // Deploy:  pnpm run cf-deploy    (builds, then `wrangler deploy`)
+  // Preview: pnpm run cf-preview   (builds, then `wrangler dev`)
+  // NOTE: scripts are cf-deploy/cf-preview, NOT `deploy` — `pnpm deploy` is a
+  // reserved pnpm builtin. Set the Cloudflare deploy command to:
+  //   pnpm --filter polizy-docs run cf-deploy
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "polizy-docs",
+  "compatibility_date": "2025-09-23",
+  "assets": {
+    "directory": "./build",
+    // Docusaurus emits a real 404.html; serve it for unmatched paths.
+    "not_found_handling": "404-page"
+  }
+}

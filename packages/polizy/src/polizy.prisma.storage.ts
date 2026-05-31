@@ -1,3 +1,7 @@
+/**
+ * @module polizy/prisma-storage
+ */
+
 import type { ReadOnlyStorage, StorageAdapter } from "./polizy.storage";
 import type {
   AnyObject,
