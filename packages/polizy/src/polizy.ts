@@ -191,10 +191,14 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       SchemaObjectTypes<S>
     >[];
     /**
-     * Reserved consistency knob (mirrors OpenFGA). Today every check reads
-     * storage live, so both values behave identically; this exists so callers
-     * can express intent before a cache/replica layer (and a revision token)
-     * lands. See the read-after-write notes in the docs.
+     * Consistency mode for this check (mirrors OpenFGA's naming).
+     *
+     * - `"default"` reads live: consistent per broadened key via the read
+     *   cache, but not guaranteed across keys, with no snapshot overhead.
+     * - `"strong"` pins every read in the check to one point-in-time snapshot
+     *   for full cross-key consistency — when the storage adapter supports
+     *   snapshots (`withSnapshot`). Adapters without snapshot support fall back
+     *   to live reads. See the read-after-write notes in the docs.
      */
     consistency?: "default" | "strong";
   }): Promise<boolean> {
