@@ -42,6 +42,28 @@ const config: Config = {
           routeBasePath: '/',
           editUrl:
             'https://github.com/bratsos/polizy/tree/main/apps/docs/',
+          async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+            const sidebarItems = await defaultSidebarItemsGenerator(args);
+            const transformItems = (items: any[]) => {
+              const polizyCategory = items.find(item => item.type === 'category' && item.label === 'polizy');
+              if (polizyCategory && polizyCategory.items) {
+                const prismaStorageIndex = polizyCategory.items.findIndex(item => item.type === 'category' && (item.label === 'prisma-storage' || item.label === 'polizy/prisma-storage'));
+                if (prismaStorageIndex !== -1) {
+                  const [prismaStorageCategory] = polizyCategory.items.splice(prismaStorageIndex, 1);
+                  prismaStorageCategory.label = 'polizy/prisma-storage';
+                  const polizyIndex = items.indexOf(polizyCategory);
+                  items.splice(polizyIndex + 1, 0, prismaStorageCategory);
+                }
+              }
+              for (const item of items) {
+                if (item.type === 'category' && item.items) {
+                  transformItems(item.items);
+                }
+              }
+              return items;
+            };
+            return transformItems(sidebarItems);
+          },
         },
         blog: false,
         theme: {
@@ -55,6 +77,7 @@ const config: Config = {
     [
       'docusaurus-plugin-typedoc',
       {
+        name: 'API Reference',
         entryPoints: [
           '../../packages/polizy/src/index.ts',
           '../../packages/polizy/src/polizy.prisma.storage.ts',
