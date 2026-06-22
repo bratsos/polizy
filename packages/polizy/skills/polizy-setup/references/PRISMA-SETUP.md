@@ -80,8 +80,9 @@ WHERE a.id > b.id
   AND a."objectId"    = b."objectId";
 ```
 
-See [migrate-0.1-to-0.2.md](../../polizy/migrations/migrate-0.1-to-0.2.md) for the
-full upgrade checklist.
+See the [migration router](../../polizy/migrations/README.md) for the full
+upgrade checklist (it applies the `@@unique`/Prisma migration guide for your
+version delta).
 
 ## Using the Adapter
 

@@ -97,6 +97,22 @@ export type InputTuple<
 export type RelationDefinition = { type: "direct" | "group" | "hierarchy" };
 
 /**
+ * Runtime metadata attached by {@link withRoleScaffold}. Lets the engine and the
+ * `RoleRegistry` recognize the generic role-binding relations without changing
+ * the type-safe relation/action vocabulary. Present only on scaffolded schemas.
+ */
+export type RoleScaffoldMeta = {
+  /** Object type used for role objects (e.g. `"role"`). */
+  roleType: string;
+  /** Reserved `group` relation binding a subject to a role it is assigned. */
+  assigneeRelation: string;
+  /** Prefix of the `direct` relations binding a role to a capability (e.g. `"cap_"`). */
+  capPrefix: string;
+  /** Action names custom roles may grant (each has a `${capPrefix}${action}` relation). */
+  grantable: readonly string[];
+};
+
+/**
  * Represents a complete authorization schema structure.
  * Generic parameters for SubjectType and ObjectType are handled by AuthSystem.
  */
@@ -127,6 +143,9 @@ export interface AuthSchema<
   fieldLevelObjects?: ReadonlyArray<ValidObjectTypes>;
   /** Separator between base id and field for `fieldLevelObjects`. Default `"#"`. */
   fieldSeparator?: string;
+
+  /** Runtime-roles metadata; set by {@link withRoleScaffold}, absent otherwise. */
+  roleScaffold?: RoleScaffoldMeta;
 
   _subjectType?: ValidSubjectTypes;
   _objectType?: ValidObjectTypes;

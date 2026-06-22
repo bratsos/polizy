@@ -4,7 +4,7 @@ description: Router for the polizy authorization library. Use when the user ment
 license: MIT
 metadata:
   author: bratsos
-  version: "0.3.0"
+  version: "0.5.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -24,6 +24,8 @@ Activate this skill when:
 - User needs to check, grant, or revoke permissions
 - User is implementing team/group-based access
 - User is implementing folder/file permission inheritance
+- User wants **end users to define their own roles at runtime** or a
+  **permissions matrix** (click-to-toggle roles × permissions)
 - User wants to **upgrade polizy** to a newer version
 
 ## Upgrading between versions
@@ -48,20 +50,35 @@ so multi-version jumps work.
 | **Action** | Intent: `view`, `edit`, `delete` — mapped to relations |
 | **Condition** | Optional time window (`validSince`/`validUntil`) and/or attribute predicates (ABAC) |
 
-## Capabilities (0.3.0)
+## Capabilities (0.5.0)
 
-- **Checks:** `check`, `checkMany` (batch), `checkOrThrow`, `explain` (why
-  allowed/denied), `listAccessibleObjects` (paginated), `listSubjects` (reverse —
-  who can do X), `listTuples` (paginated).
+- **Checks & queries:** `check`, `checkMany` (batch), `checkOrThrow`, `explain`
+  (why allowed/denied), `listAccessibleObjects` (paginated), `listSubjects`
+  (reverse — who can do X), `someoneCan` (existence; short-circuits),
+  `countSubjects` / `countAccessibleObjects`, `listTuples` (paginated). All the
+  read queries accept `preload?: boolean` (one up-front read; for remote/slow stores).
 - **Writes (idempotent):** `allow`, `allowMany`, `disallowAllMatching`,
   `addMember`/`removeMember`, `setParent`/`removeParent`. Use `as` to pick a
   relation when the schema declares more than one group/hierarchy relation.
+- **Runtime custom roles:** `withRoleScaffold(schema, …)` merges a generic role
+  scaffold into a schema (type-preserving) and `RoleRegistry` gives typed sugar —
+  `defineRole`, `grantToRole`/`revokeFromRole`, `assignRole`/`unassignRole`,
+  `deleteRole`, `listRoles`, `permissionMatrix` (one read backing a
+  click-to-toggle roles × permissions UI). Roles are **pure tuples**: a custom
+  role built from existing actions needs no schema change. An optional
+  `RoleCatalogStore` (InMemory or Prisma) tracks role existence + labels only —
+  the engine never reads it.
 - **Conditions:** time-boxed grants + attribute predicates (`eq ne in nin gt gte
   lt lte`, dot-paths) evaluated against a per-check `context`.
-- **Wildcards:** `everyone("user")` grants to every subject of a type.
+- **Wildcards:** `everyone("user")` grants to every subject of a type — and
+  (0.5.0) wildcard membership now **propagates through group recursion**, so
+  `assignRole(everyone("user"), role)` grants every subject of that type.
 - **Field-level ids:** opt-in per object type via `fieldLevelObjects`.
 - **Config:** `defaultCheckDepth`, `maxDepthBehavior` (`"throw"` | `"deny"`),
-  `logger`, `fieldSeparator`.
+  `logger`, `fieldSeparator`, and (0.5.0) `defaultGroupRelation` /
+  `defaultHierarchyRelation` (which relation `addMember`/`setParent` use when the
+  schema has more than one) plus `nonSubjectTypes` (object types kept out of
+  `listSubjects` unless requested via `ofType`).
 
 ## Route to Specialized Skill
 
@@ -70,6 +87,7 @@ so multi-version jumps work.
 | Install / first-time setup | `polizy-setup` |
 | Define or change the model (relations, actions, fields, hierarchy) | `polizy-schema` |
 | Implement a scenario (team access, inheritance, temp access, revocation, fields) | `polizy-patterns` |
+| End-user / runtime custom roles, permissions matrix (`RoleRegistry`) | `polizy-patterns` (schema setup via `withRoleScaffold` in `polizy-schema`) |
 | Storage adapters (InMemory, Prisma, custom), performance, production | `polizy-storage` |
 | Debug unexpected allow/deny, errors | `polizy-troubleshooting` |
 | **Upgrade polizy between versions** | [`migrations/README.md`](./migrations/README.md) |

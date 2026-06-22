@@ -1,0 +1,9 @@
+{
+  "label": "Demos",
+  "position": 1.4,
+  "link": {
+    "type": "generated-index",
+    "slug": "/demos",
+    "description": "Live, in-browser demos of polizy. Each one runs a real Postgres (PGlite, WASM) entirely in your browser — no server, nothing leaves the page."
+  }
+}

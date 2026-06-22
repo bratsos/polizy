@@ -1,0 +1,25 @@
+---
+sidebar_position: 3
+title: Scale Benchmark
+hide_table_of_contents: true
+---
+
+A performance playground over tens of thousands of tuples, running a real Postgres in your browser via PGlite. Generate a dataset and benchmark each read path: `check` / `explain` stay roughly constant-time as the table grows, while `listSubjects` / `listAccessibleObjects` are output-linear — sub-second even at ~83k tuples.
+
+<iframe
+  src="https://bench.polizy.dev"
+  title="polizy scale benchmark demo"
+  style={{ width: '100%', height: '85vh', border: '1px solid var(--ifm-color-emphasis-300)', borderRadius: '8px' }}
+  loading="lazy"
+  allow="clipboard-write"
+/>
+
+[Open the demo in a new tab ↗](https://bench.polizy.dev)
+
+:::note
+
+If the embed doesn't load, please open it directly using the link above.
+
+:::
+
+See the [Performance](../performance/overview.md) overview for how these numbers are achieved, or browse the [source on GitHub](https://github.com/bratsos/polizy/tree/main/examples/scale-benchmark).

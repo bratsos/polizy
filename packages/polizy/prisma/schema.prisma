@@ -23,3 +23,17 @@ model PolizyTuple {
   @@index([subjectType, subjectId, relation])
   @@index([objectType, objectId, relation])
 }
+
+// Optional catalog for the runtime-roles feature (RoleRegistry + PrismaRoleCatalog).
+// Tracks role existence + labels so empty roles are listable; the authorization
+// engine never reads this table — capabilities/assignments live in PolizyTuple.
+model PolizyRole {
+  id      String  @id @default(cuid())
+  tenant  String // tenant scope key, "${type}:${id}"
+  key     String // role name (unique within a tenant)
+  label   String?
+  actions Json // string[] of granted action names (denormalized cache)
+
+  @@unique([tenant, key])
+  @@index([tenant])
+}

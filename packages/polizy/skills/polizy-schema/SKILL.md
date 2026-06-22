@@ -4,7 +4,7 @@ description: Schema design guide for polizy authorization. Use when defining rel
 license: MIT
 metadata:
   author: bratsos
-  version: "0.3.0"
+  version: "0.5.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -247,6 +247,101 @@ await authz.removeMember({ member: user, group: team, as: "member" });
 that isn't of the right kind (or doesn't exist) is a compile-time error and, at
 runtime, a `SchemaError`.
 
+## Runtime Custom Roles (withRoleScaffold)
+
+**0.5.0** lets end users define their own named roles **at runtime** — without a
+schema change — as long as those roles bundle the **existing**, type-safe action
+vocabulary (the common "permissions matrix": new role columns, fixed permission
+rows). `withRoleScaffold` merges a generic role scaffold into your schema while
+**preserving its literal types**. It adds, exactly once:
+
+- a `role` object type,
+- a reserved `assignee` **group** relation (`user --assignee--> role`),
+- one `cap_<action>` **direct** relation per grantable action, appended to that
+  action's `actionToRelations`.
+
+Defaults: `roleType: "role"`, `assigneeRelation: "assignee"`, `capPrefix: "cap_"`
+(all overridable). It throws `SchemaError` if the `assignee` relation name
+collides, a `cap_<action>` relation collides, or a grantable action isn't already
+present in `actionToRelations`.
+
+A custom role resolves on the **unchanged engine** as ordinary tuples —
+`user --assignee(group)--> role --cap_<action>(direct)--> resource` — and you
+check it with the ordinary `check()`. There is **no new verb** and no new storage
+table for the roles themselves (the optional `PolizyRole` catalog is metadata
+only; the engine never reads it).
+
+Grantable actions stay **literal-typed**: `GrantableAction<S>` is the compile-time
+union of scaffolded actions, so `defineRole({ can })`, `grantToRole(role, action)`,
+and `check({ canThey })` reject typos at compile time. Only the role *name* is a
+runtime string.
+
+```typescript
+import { defineSchema, withRoleScaffold, AuthSystem } from "polizy";
+
+const base = defineSchema({
+  objectTypes: ["document", "workspace", "role"],
+  relations: {
+    owner: { type: "direct" },
+    editor: { type: "direct" },
+    viewer: { type: "direct" },
+    member: { type: "group" },       // existing team membership
+    parent: { type: "hierarchy" },
+  },
+  actionToRelations: {
+    delete: ["owner"],
+    edit: ["owner", "editor"],
+    view: ["owner", "editor", "viewer"],
+  },
+  hierarchyPropagation: { view: ["view"], edit: ["edit"] },
+});
+
+// Make edit/view/delete grantable via runtime roles.
+const schema = withRoleScaffold(base, {
+  grantable: ["edit", "view", "delete"],
+});
+// schema now has: a `role` type, an `assignee` group relation, and
+// cap_edit / cap_view / cap_delete direct relations appended to those actions.
+
+const authz = new AuthSystem({
+  schema,
+  storage,
+  // The scaffold added a SECOND group relation (`assignee`), so addMember/
+  // removeMember can no longer infer the group. Pin your existing group:
+  defaultGroupRelation: "member",
+});
+```
+
+### New AuthSystem config (0.5.0, all backward compatible)
+
+- **`defaultGroupRelation?`** — the relation `addMember`/`removeMember` use when no
+  `as` is given and the schema declares **more than one** group relation. The
+  scaffold's `assignee` relation is **auto-excluded** from group inference, so a
+  schema that previously had exactly one group relation keeps inferring it after
+  opting into the scaffold (this is why the scaffold is non-breaking). If you also
+  add your own extra group relations, set `defaultGroupRelation` to keep existing
+  `addMember` calls working without `as`.
+- **`defaultHierarchyRelation?`** — same idea for `setParent`/`removeParent` when
+  there is more than one hierarchy relation.
+- **`nonSubjectTypes?`** — object types that must NOT surface in `listSubjects`
+  unless explicitly requested via `ofType`. The scaffold's `role` type is added
+  automatically, so role objects never leak as subjects.
+
+Passing a `defaultGroupRelation`/`defaultHierarchyRelation` that isn't a relation
+of that kind throws `SchemaError` at construction.
+
+### Wildcard membership now propagates through groups
+
+Assigning `everyone(type)` to a group/role (e.g. assigning every `user` to a role)
+now grants every subject of that type through group recursion — honored in
+`check()`, `explain()`, and `listAccessibleObjects`. (Previously wildcard members
+were silently ignored during group traversal.)
+
+> The ergonomic, typed `RoleRegistry` (defineRole / grantToRole / assignRole /
+> permissionMatrix, etc.) and the catalog stores live in **polizy-patterns** — see
+> [RUNTIME-ROLES.md](../polizy-patterns/references/RUNTIME-ROLES.md) for the full
+> end-user-custom-roles recipe.
+
 ## Field-Level Objects (0.3.0)
 
 Field-level identifiers let an object id carry a field after the separator
@@ -337,6 +432,8 @@ time-boxed). See [polizy-patterns](../polizy-patterns/SKILL.md) for the recipe.
 | No `member: { type: "group" }` | `addMember()` throws `SchemaError` | Add a group relation to schema |
 | No `parent: { type: "hierarchy" }` | `setParent()` throws `SchemaError` | Add a hierarchy relation to schema |
 | >1 group/hierarchy relation, no `as` | `addMember()`/`setParent()` throws `SchemaError` | Pass `as: "..."` to disambiguate |
+| Opted into the scaffold + own extra group relation, `addMember` throws "multiple group relations" | `addMember()` can't infer the group | Set `defaultGroupRelation: "member"` on `AuthSystem` (or pass `as`) |
+| Scaffolding an action not in `actionToRelations` | `withRoleScaffold` throws `SchemaError` | Only list `grantable` actions that already exist in `actionToRelations` |
 | Using `#` ids without `fieldLevelObjects` | `doc1#field` checks return false | Add the type to `fieldLevelObjects` |
 | Missing hierarchyPropagation | Parent permissions don't flow to children | Add hierarchyPropagation config |
 | Using generic names ("access") | Can't distinguish read/write | Use semantic names (viewer, editor) |
@@ -392,7 +489,7 @@ const schemaV3 = defineSchema({
 
 - [polizy-patterns](../polizy-patterns/SKILL.md) - Scenario recipes: team access, folder inheritance, field-level permissions, temporary/ABAC grants, revocation
 - [polizy-troubleshooting](../polizy-troubleshooting/SKILL.md) - Schema debugging
-- [polizy](../polizy/migrations/migrate-0.1-to-0.2.md) - 0.1 → 0.2 migration guide
+- [migrations/README.md](../polizy/migrations/README.md) - Version upgrade router
 
 ## References
 

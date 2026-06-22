@@ -232,6 +232,12 @@ const { accessible } = await authz.listAccessibleObjects({ who: { type: "user", 
 // Who can perform an action on this object? (reverse expansion)
 const subjects = await authz.listSubjects({ canThey: "view", onWhat: { type: "document", id: "doc1" } });
 
+// Existence (short-circuits) and counts — same args as listSubjects/listAccessibleObjects.
+// A wildcard grant (everyone(type)) counts as one entry, not a per-user expansion.
+const isShared = await authz.someoneCan({ canThey: "view", onWhat: { type: "document", id: "doc1" } });
+const viewerCount = await authz.countSubjects({ canThey: "view", onWhat: { type: "document", id: "doc1" } });
+const docCount = await authz.countAccessibleObjects({ who: { type: "user", id: "alice" }, ofType: "document" });
+
 // Why was a check allowed/denied?
 const why = await authz.explain({ who: { type: "user", id: "carol" }, canThey: "view", onWhat: { type: "document", id: "doc1" } });
 // { allowed: true, via: { kind: "group", relation: "member", through: {type:"team",id:"alpha"}, via: { kind:"direct", relation:"viewer" } } }
@@ -290,6 +296,75 @@ await authz.check({ who: employee, canThey: "view", onWhat: { type: "document", 
 ```
 
 Field ids are validated on write (empty base or empty field throws), and types **not** in `fieldLevelObjects` never split — so ids that naturally contain `#` can't accidentally leak access.
+
+## Runtime custom roles
+
+Some apps let their **end users** define roles in-app — a permissions matrix where
+each workspace invents its own "Billing Manager" or "Guide" from a fixed set of
+permissions. polizy supports this with **no schema change and no redeploy**: roles
+are pure data (the canonical Zanzibar "roles as data" pattern), resolved by the
+existing group + hierarchy + direct traversal.
+
+Add the scaffold once (keeps your schema fully type-safe), then use `RoleRegistry`:
+
+```ts
+import {
+  AuthSystem, InMemoryStorageAdapter, defineSchema,
+  withRoleScaffold, RoleRegistry, InMemoryRoleCatalog,
+} from "polizy";
+
+const base = defineSchema({
+  subjectTypes: ["user"],
+  objectTypes: ["workspace", "booking"],
+  relations: { owner: { type: "direct" }, member: { type: "group" }, parent: { type: "hierarchy" } },
+  actionToRelations: { view_bookings: ["owner"], issue_refunds: ["owner"], manage_settings: ["owner"] },
+  hierarchyPropagation: { view_bookings: ["view_bookings"], issue_refunds: ["issue_refunds"], manage_settings: ["manage_settings"] },
+});
+
+// `grantable` = the actions custom roles may grant. Stays compile-time literal-typed.
+const schema = withRoleScaffold(base, { grantable: ["view_bookings", "issue_refunds"] });
+
+const authz = new AuthSystem({ storage: new InMemoryStorageAdapter(), schema, defaultGroupRelation: "member" });
+const roles = new RoleRegistry(authz, schema, { catalog: new InMemoryRoleCatalog() });
+
+// Create a role at runtime (the name is a string; the actions are type-checked).
+const billing = await roles.defineRole({
+  tenant: { type: "workspace", id: "acme" },
+  name: "billing_manager",
+  can: ["view_bookings", "issue_refunds"], // 'isue_refunds' → compile error
+});
+await roles.assignRole({ type: "user", id: "alice" }, billing);
+
+// Checking is the ordinary check() — no new verb.
+await authz.check({ who: { type: "user", id: "alice" }, canThey: "issue_refunds", onWhat: { type: "booking", id: "bk1" } }); // true (booking belongs to workspace:acme)
+```
+
+The scaffold adds a `role` object type, a reserved `assignee` group relation
+(`user --assignee--> role`), and one `cap_<action>` relation per grantable action
+(`role --cap_<action>--> resource`). A workspace-scoped capability flows down to the
+workspace's resources via `hierarchyPropagation` — so `setParent` each resource under
+its workspace (or check coarse permissions against the workspace directly).
+
+`RoleRegistry` methods: `defineRole`, `grantToRole` / `revokeFromRole` (toggle a
+permission), `assignRole` / `unassignRole`, `deleteRole` (cascades caps + members),
+`listRoles`, `getRolePermissions`, `listRoleMembers`, and `permissionMatrix(tenant)`
+(rows × columns in one read — backs an "add role + click-to-toggle" UI).
+
+* **Type-safety:** the `grantable` actions stay a compile-time `GrantableAction<S>`
+  union; only the role *name* is a runtime string, and roles come back as a branded
+  `RoleRef` so a role can't be confused with a resource.
+* **Multi-tenancy:** role ids are tenant-namespaced (`role:acme/billing_manager`), so
+  two workspaces can define identically-named roles with different permissions.
+* **Wildcards:** `assignRole(everyone("user"), role)` grants a role to every user.
+* **Persistence:** `InMemoryRoleCatalog`, or `PrismaRoleCatalog` from
+  `polizy/prisma-storage` (add the `PolizyRole` model). The catalog tracks role
+  existence + labels so empty roles stay listable; the engine never reads it.
+* **Custom relations/verbs:** adding genuinely *new* permission verbs per tenant is a
+  schema concern (as in every ReBAC system) — the scaffold covers runtime *roles*
+  built from your known action vocabulary, which is the common case.
+
+A runnable demo (permissions matrix UI + headless walkthrough) lives in
+`examples/permissions-matrix`.
 
 ## Custom storage adapters
 

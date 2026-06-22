@@ -1,6 +1,6 @@
 ---
 title: Framework Integration
-sidebar_position: 11
+sidebar_position: 12
 ---
 
 # Framework Integration

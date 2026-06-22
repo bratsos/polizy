@@ -1,0 +1,30 @@
+{
+  // Cloudflare Workers — Static Assets (this is Workers, NOT Pages).
+  //
+  // The demo is a static Vite + React SPA: every visitor's database is a real
+  // Postgres running in their own browser via PGlite, so there is no server
+  // code. `vite build` emits a fully static site to `dist/` (the index.html
+  // shell plus the PGlite .wasm/.data assets), so this is an "assets-only"
+  // Worker — there is no `main` entrypoint.
+  //
+  // Deploy:  pnpm run cf-deploy    (builds, then `wrangler deploy`)
+  // Preview: pnpm run cf-preview   (builds, then `wrangler dev`)
+  //
+  // NOTE: the scripts are named `cf-deploy`/`cf-preview`, NOT `deploy`, because
+  // `pnpm deploy` is a reserved built-in command that shadows a script named
+  // `deploy`. Set the Cloudflare deploy command to:
+  //   pnpm --filter example-scale-benchmark run cf-deploy
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "polizy-bench",
+  "compatibility_date": "2025-09-23",
+  "assets": {
+    // The prebuilt SPA. `vite build` writes here.
+    "directory": "./dist",
+    // Client-side routing: any path that doesn't map to a built file is served
+    // index.html with HTTP 200 so the app resolves the route in the browser.
+    "not_found_handling": "single-page-application"
+  },
+  // Bind the worker to a subdomain of polizy.dev. `custom_domain: true` makes
+  // wrangler provision the DNS record + edge certificate in the zone on deploy.
+  "routes": [{ "pattern": "bench.polizy.dev", "custom_domain": true }]
+}

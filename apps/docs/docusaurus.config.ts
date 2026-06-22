@@ -109,6 +109,11 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          to: '/demos',
+          label: 'Demos',
+          position: 'left',
+        },
+        {
           to: '/api/',
           label: 'API Reference',
           position: 'left',
@@ -145,7 +150,15 @@ const config: Config = {
           items: [
             {
               label: 'Live Demo',
-              to: '/getting-started/live-demo',
+              to: '/demos/live-demo',
+            },
+            {
+              label: 'Permissions Matrix',
+              to: '/demos/permissions-matrix',
+            },
+            {
+              label: 'Scale Benchmark',
+              to: '/demos/scale-benchmark',
             },
           ],
         },

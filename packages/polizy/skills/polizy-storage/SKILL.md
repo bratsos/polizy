@@ -4,7 +4,7 @@ description: Storage adapter setup for polizy authorization. Use when configurin
 license: MIT
 metadata:
   author: bratsos
-  version: "0.3.0"
+  version: "0.5.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -171,6 +171,40 @@ interface StorageAdapter<S, O> {
 
 See [CUSTOM-ADAPTERS.md](references/CUSTOM-ADAPTERS.md) for the exact
 idempotent-write, delete, and pagination semantics every adapter must honor.
+
+## Role catalog (runtime roles)
+
+When you use `RoleRegistry` for runtime custom roles, an optional
+`RoleCatalogStore` tracks role **existence + labels**. This is metadata only —
+**the engine never reads the catalog**. Capabilities (`cap_<action>` tuples) and
+assignments (`assignee` membership tuples) live as ordinary tuples in the
+`StorageAdapter`, so a role is fully functional even with no catalog at all. The
+catalog exists so permission-less roles stay listable (e.g. a freshly-created
+role with no caps yet still shows up in `listRoles`/`permissionMatrix`).
+
+```typescript
+// Dev / tests: in-memory catalog
+import { AuthSystem, InMemoryStorageAdapter, InMemoryRoleCatalog, RoleRegistry } from "polizy";
+
+const authz = new AuthSystem({ storage: new InMemoryStorageAdapter(), schema });
+const roles = new RoleRegistry(authz, schema, { catalog: new InMemoryRoleCatalog() });
+```
+
+```typescript
+// Production: Prisma-backed catalog
+import { AuthSystem, RoleRegistry } from "polizy";
+import { PrismaAdapter, PrismaRoleCatalog } from "polizy/prisma-storage";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+const authz = new AuthSystem({ storage: PrismaAdapter(prisma), schema });
+const roles = new RoleRegistry(authz, schema, { catalog: PrismaRoleCatalog(prisma) });
+```
+
+`PrismaRoleCatalog` needs the new optional `PolizyRole` Prisma model — see
+[PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md). The catalog is independent of
+the tuple `StorageAdapter`: you can pair an in-memory catalog with a Prisma
+adapter or vice versa, since the engine resolves roles purely from tuples.
 
 ## Common Patterns
 

@@ -4,7 +4,7 @@ description: Debug and fix polizy authorization issues. Use when permission chec
 license: MIT
 metadata:
   author: bratsos
-  version: "0.3.0"
+  version: "0.5.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -297,6 +297,28 @@ await authz.allow({ who: alice, toBe: "temp_viewer", onWhat: doc,
 ```
 
 When `temp_viewer` expires, the standing `viewer` tuple is untouched.
+
+### 8. Runtime Roles (0.5.0)
+
+Issues specific to `withRoleScaffold` + `RoleRegistry` (runtime custom roles).
+Roles are pure tuples — `user --assignee(group)--> role --cap_<action>(direct)-->
+resource` — so the same `check()`/`explain()` diagnostics above apply. The
+scaffold adds a reserved `assignee` group relation and one `cap_<action>` direct
+relation per grantable action.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `addMember`/`assignRole` throws `SchemaError: Schema declares multiple 'group' relations` after `withRoleScaffold` | The scaffold added the reserved `assignee` group relation, so a schema that previously had exactly one group relation now has two and group inference is ambiguous | Set `defaultGroupRelation: "member"` (your real group) in the `AuthSystem` config; the scaffold's `assignee` is auto-excluded from inference, and `RoleRegistry` always passes `as: "assignee"` itself |
+| A custom role grants nothing | A per-resource action needs `hierarchyPropagation` **and** the resource parented to the tenant for the workspace-scoped `cap_<action>` to flow down; otherwise the cap sits only on the tenant/workspace object | Add `hierarchyPropagation` for the action and `setParent` the resource under the tenant, **or** `check()` the tenant/workspace object directly. Also confirm the role NAME has no typo — an unknown role resolves to a role with no caps and fails closed |
+| `listSubjects`/`listAccessibleObjects` slow on large datasets | They gather a candidate set then confirm **each** candidate with a full `check`, so cost is ~O(candidates x check) and scales with the reachable set, not the tuple count | Narrow with `ofType`/`canThey`, paginate, or cache. Reserve for admin/list views — don't put them on the hot path |
+
+> `explain()` works through roles too: a granting path surfaces the
+> `assignee` group hop into the role, then the `cap_<action>` edge (direct or via
+> `hierarchy`). If `allowed` is `false`, the role is missing the cap, the user
+> isn't assigned, or the resource isn't parented to the tenant. The engine never
+> reads the role catalog — capabilities and assignments are tuples in the
+> `StorageAdapter`. See
+> [polizy-patterns/references/RUNTIME-ROLES.md](../polizy-patterns/references/RUNTIME-ROLES.md).
 
 ## Debugging Techniques
 
