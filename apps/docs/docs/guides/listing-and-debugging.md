@@ -1,6 +1,6 @@
 ---
 title: Listing & Debugging
-sidebar_position: 9
+sidebar_position: 10
 ---
 
 # Listing & Debugging
@@ -67,7 +67,40 @@ console.log(subjects);
 
 ---
 
-## 3. Explaining Permission Decisions (`explain`)
+## 3. Existence & Counts (`someoneCan`, `countSubjects`, `countAccessibleObjects`)
+
+Often you don't need the full list — just a yes/no or a number. `someoneCan` returns a boolean and **short-circuits** at the first qualifying subject; `countSubjects` / `countAccessibleObjects` return the size of the same sets `listSubjects` / `listAccessibleObjects` would return. A wildcard grant (`everyone(type)`) counts as a single entry.
+
+```ts
+// Is this document shared with anyone? (stops at the first match)
+const isShared = await authz.someoneCan({
+  canThey: "view",
+  onWhat: { type: "document", id: "doc1" },
+  ofType: "user", // optional — same filters as listSubjects
+});
+
+// How many users can view it?
+const viewerCount = await authz.countSubjects({
+  canThey: "view",
+  onWhat: { type: "document", id: "doc1" },
+});
+
+// How many documents can Alice open?
+const docCount = await authz.countAccessibleObjects({
+  who: { type: "user", id: "alice" },
+  ofType: "document",
+});
+```
+
+:::tip[Large or remote stores]
+
+`listSubjects`, `listAccessibleObjects`, `someoneCan`, the counts, and `checkMany` all accept `preload: true`, which fetches the tuple set in one read and resolves in memory — worth it when per-query round-trips dominate. See **[Read Scopes](../performance/read-scopes.md)**.
+
+:::
+
+---
+
+## 4. Explaining Permission Decisions (`explain`)
 
 When a user complains that they can't access a resource, or you need to verify why a check succeeded, use `explain()`. It returns a detailed graph trace showing the path of the authorized permission.
 
@@ -103,7 +136,7 @@ Output:
 
 ---
 
-## 4. Retrieving Raw Tuples (`listTuples`)
+## 5. Retrieving Raw Tuples (`listTuples`)
 
 If you want to view, export, or audit raw unexpanded relations exactly as they are stored in the database, use `listTuples`. You can filter by subject, relation, or object, and paginate the results.
 

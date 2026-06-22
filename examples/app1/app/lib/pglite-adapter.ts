@@ -38,6 +38,14 @@ export const POLIZY_TUPLE_DDL = `
     -- One fact per (subject, relation, object): makes writes idempotent.
     UNIQUE (subject_type, subject_id, relation, object_type, object_id)
   );
+  -- Both hot read paths must be indexed. The UNIQUE above already covers
+  -- subject-anchored reads (its left prefix), but OBJECT-anchored reads
+  -- ("who holds this object?", reverse expansion) would otherwise be full
+  -- table scans. Mirror the library's Prisma indexes.
+  CREATE INDEX IF NOT EXISTS polizy_tuple_subject_idx
+    ON polizy_tuple (subject_type, subject_id, relation);
+  CREATE INDEX IF NOT EXISTS polizy_tuple_object_idx
+    ON polizy_tuple (object_type, object_id, relation);
 `;
 
 type Row = {

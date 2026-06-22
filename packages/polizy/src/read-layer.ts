@@ -47,10 +47,19 @@ function matches<S extends SubjectType, O extends ObjectType>(
   return true;
 }
 
-/** A fetched broad set plus a relation index over it, for O(matches) re-filtering. */
+/**
+ * A fetched broad set plus secondary indexes over it, for O(matches) re-filtering.
+ * `bySubject`/`byObject` are keyed by `objKey` (type:id) ONLY — never a full-value
+ * serialization — so tuples that share a type:id but carry extra props still land
+ * in the same bucket and are correctly accepted/rejected by `matches()`'s
+ * `deepEqual`. These let a point query off a preloaded "*" set narrow to
+ * O(deg(subject|object)) instead of scanning a whole relation bucket.
+ */
 type CachedSet<S extends SubjectType, O extends ObjectType> = {
   all: StoredTuple<S, O>[];
   byRelation: Map<string, StoredTuple<S, O>[]>;
+  bySubject: Map<string, StoredTuple<S, O>[]>;
+  byObject: Map<string, StoredTuple<S, O>[]>;
 };
 
 /**
@@ -114,33 +123,45 @@ export class ReadCache<S extends SubjectType, O extends ObjectType>
         this.sets.set(key, entry);
       }
     }
-    const { all, byRelation } = await entry;
-    // Narrow by relation first: a broad per-subject/-object set splits across
-    // relations, so the in-memory filter stays O(matches) even when the
-    // broadened set is large (a hot wildcard principal, a big team).
-    const pool = filter.relation
-      ? (byRelation.get(filter.relation) ?? [])
-      : all;
+    const { all, byRelation, bySubject, byObject } = await entry;
+    // Narrow to the most selective index present (subject > object > relation),
+    // mirroring broaden()'s precedence and the adapter's own candidate router.
+    // For a per-subject/-object cache the routed bucket equals `all`'s relevant
+    // subset; for a preloaded "*" set it avoids scanning a whole relation bucket
+    // (a hot wildcard principal, a big team). matches() then applies the rest.
+    let pool: StoredTuple<S, O>[];
+    if (filter.subject) pool = bySubject.get(objKey(filter.subject)) ?? [];
+    else if (filter.object) pool = byObject.get(objKey(filter.object)) ?? [];
+    else if (filter.relation) pool = byRelation.get(filter.relation) ?? [];
+    else pool = all;
     const base = pool.filter((t) => matches(t, filter));
     const fromContext = this.contextual.filter((t) => matches(t, filter));
     return fromContext.length ? [...base, ...fromContext] : base;
   }
 
-  /** Fetch a broad set once and index it by relation. */
+  /** Fetch a broad set once and index it by relation, subject, and object. */
   private async fetch(
     broad: Partial<InputTuple<S, O>>,
   ): Promise<CachedSet<S, O>> {
     const all = await this.storage.findTuples(broad);
     const byRelation = new Map<string, StoredTuple<S, O>[]>();
+    const bySubject = new Map<string, StoredTuple<S, O>[]>();
+    const byObject = new Map<string, StoredTuple<S, O>[]>();
+    const push = (
+      map: Map<string, StoredTuple<S, O>[]>,
+      key: string,
+      t: StoredTuple<S, O>,
+    ) => {
+      const bucket = map.get(key);
+      if (bucket) bucket.push(t);
+      else map.set(key, [t]);
+    };
     for (const t of all) {
-      let bucket = byRelation.get(t.relation);
-      if (!bucket) {
-        bucket = [];
-        byRelation.set(t.relation, bucket);
-      }
-      bucket.push(t);
+      push(byRelation, t.relation, t);
+      push(bySubject, objKey(t.subject), t);
+      push(byObject, objKey(t.object), t);
     }
-    return { all, byRelation };
+    return { all, byRelation, bySubject, byObject };
   }
 
   async findSubjects(

@@ -156,3 +156,4 @@ Once your schema is defined, you are ready to plug it into an `AuthSystem` insta
 
 * To learn more about all the configuration options and types, read the [Schema Reference](./schema-reference.md).
 * To see how to initialize the authorization engine with your schema, check out the [Quickstart](../getting-started/quickstart.md).
+* If your users need to define their **own roles at runtime** (without editing this schema), see [Runtime Custom Roles](../guides/runtime-roles.md).

@@ -133,6 +133,29 @@ If your database supports repeatable reads or snapshot isolation (like PostgreSQ
 - It must execute the callback `fn`, passing it a `reader` object which implements `findTuples`, `findSubjects`, and `findObjects` resolved against that snapshot.
 - If you do not implement this, polizy will automatically fall back to live reads when users ask for `consistency: "strong"`.
 
+### 4. Index both hot read paths (required for performance)
+
+polizy reads tuples two ways, and **both must be indexed** or list operations
+degrade to full table scans at scale:
+
+- **Subject-anchored:** `WHERE subjectType = ? AND subjectId = ?` — "what does this subject have?" (the `check` walk).
+- **Object-anchored:** `WHERE objectType = ? AND objectId = ?` — "who holds this object?" (`findSubjects`, reverse expansion, and the `listSubjects` / `listAccessibleObjects` gather).
+
+A common mistake is to rely on a single `UNIQUE (subjectType, subjectId, relation, objectType, objectId)` constraint: its left prefix serves subject-anchored reads, but object-anchored reads are **not** a prefix of it, so they fall back to a full scan. That makes the list operations scale super-linearly with the table size. Add an explicit object index (the bundled Prisma adapter already ships both):
+
+```sql
+CREATE INDEX polizy_tuple_subject_idx ON polizy_tuple (subject_type, subject_id, relation);
+CREATE INDEX polizy_tuple_object_idx  ON polizy_tuple (object_type, object_id, relation);
+```
+
+:::tip[Measured impact]
+
+On a ~35k-tuple dataset, adding the object index alone took direct `listSubjects`
+from ~9.7s to ~1.2s (~8×) and `listAccessibleObjects` from ~4.3s to ~0.4s (~10×) —
+before any other optimization. See [Performance](../performance/overview.md).
+
+:::
+
 ---
 
 ## Testing Your Adapter

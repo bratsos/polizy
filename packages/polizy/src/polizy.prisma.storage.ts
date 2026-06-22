@@ -3,6 +3,7 @@
  */
 
 import type { ReadOnlyStorage, StorageAdapter } from "./polizy.storage";
+import type { RoleCatalogRecord, RoleCatalogStore } from "./role-registry";
 import type {
   AnyObject,
   Condition,
@@ -287,3 +288,79 @@ export function PrismaAdapter<
  * `PrismaStorageAdapter` name resolves; both are the same factory.
  */
 export const PrismaStorageAdapter = PrismaAdapter;
+
+/** The minimal `polizyRole` delegate the role catalog uses. */
+type PrismaRoleClientLike = {
+  polizyRole: {
+    upsert(args: any): Promise<any>;
+    deleteMany(args: { where: unknown }): Promise<{ count: number }>;
+    findUnique(args: any): Promise<any>;
+    findMany(args: any): Promise<any[]>;
+  };
+};
+
+/** Coerce a stored JSON `actions` column back into a string[]. */
+function reviveActions(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.filter((a): a is string => typeof a === "string")
+    : [];
+}
+
+function mapRoleRecord(row: any): RoleCatalogRecord {
+  return {
+    tenant: row.tenant,
+    key: row.key,
+    label: row.label ?? undefined,
+    actions: reviveActions(row.actions),
+  };
+}
+
+/**
+ * A persistent {@link RoleCatalogStore} backed by the `PolizyRole` table. Pass
+ * it to a {@link RoleRegistry} so empty roles are listable and `assignRole` can
+ * verify a role exists. The authorization engine never reads it — capabilities
+ * and assignments live in `PolizyTuple` via the {@link PrismaAdapter}.
+ *
+ * @example
+ * const roles = new RoleRegistry(authz, schema, {
+ *   catalog: PrismaRoleCatalog(new PrismaClient()),
+ * });
+ */
+export function PrismaRoleCatalog(
+  prisma: PrismaRoleClientLike,
+): RoleCatalogStore {
+  const p = prisma;
+  return {
+    async upsert(record: RoleCatalogRecord): Promise<void> {
+      await p.polizyRole.upsert({
+        where: { tenant_key: { tenant: record.tenant, key: record.key } },
+        create: {
+          tenant: record.tenant,
+          key: record.key,
+          label: record.label ?? null,
+          actions: record.actions,
+        },
+        update: {
+          label: record.label ?? null,
+          actions: record.actions,
+        },
+      });
+    },
+    async remove(tenant: string, key: string): Promise<void> {
+      await p.polizyRole.deleteMany({ where: { tenant, key } });
+    },
+    async get(tenant: string, key: string): Promise<RoleCatalogRecord | null> {
+      const row = await p.polizyRole.findUnique({
+        where: { tenant_key: { tenant, key } },
+      });
+      return row ? mapRoleRecord(row) : null;
+    },
+    async list(tenant: string): Promise<RoleCatalogRecord[]> {
+      const rows = await p.polizyRole.findMany({
+        where: { tenant },
+        orderBy: { key: "asc" },
+      });
+      return rows.map(mapRoleRecord);
+    },
+  };
+}

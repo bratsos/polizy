@@ -44,3 +44,7 @@ dev.db
 
 # Docusaurus generated api docs
 apps/docs/docs/api/
+
+# polizy role-catalog test DB (isolated from dev.db)
+dev-roles.db
+*.db-journal

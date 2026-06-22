@@ -4,7 +4,7 @@ description: Implementation patterns for polizy authorization. Use when implemen
 license: MIT
 metadata:
   author: bratsos
-  version: "0.3.0"
+  version: "0.5.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -37,6 +37,7 @@ Copy-paste patterns for common authorization scenarios.
 | Filtering a fetched list | Batch checks | [Pattern 11](#pattern-11-batch-checks-for-list-endpoints) |
 | Share dialog / access audit | Reverse expansion | [Pattern 12](#pattern-12-who-can-access-this-listsubjects) |
 | Debugging "why allowed/denied" | Explain | [Pattern 13](#pattern-13-debugging-with-explain) |
+| End users define their own roles / permissions matrix | Runtime Custom Roles | [references/RUNTIME-ROLES.md](references/RUNTIME-ROLES.md) |
 
 > **0.3.0 quick notes used throughout these patterns**
 >
@@ -389,6 +390,11 @@ Wildcard grants honor conditions, so you can scope them by time or attributes
 (e.g. public during a launch window). Revoke with
 `disallowAllMatching({ who: everyone("user"), was: "viewer", onWhat })`.
 
+> **0.5.0:** a wildcard assignment now also propagates through groups/roles —
+> `assignRole(everyone("user"), role)` grants the role (and its capabilities) to
+> every subject of that type. Honored in `check()`, `explain()`, and
+> `listAccessibleObjects`.
+
 ---
 
 ## Pattern 10: Attribute Conditions (ABAC)
@@ -510,6 +516,100 @@ to diagnose failing checks.
 
 ---
 
+## Pattern 14: Runtime Custom Roles
+
+Let **end users** define their own named roles (a permissions matrix: new
+roles/columns over a fixed set of actions/rows) without a schema change. Roles
+are pure tuples — `withRoleScaffold` adds a generic `role` type, a reserved
+`assignee` group relation, and one `cap_<action>` relation per *grantable*
+action, while preserving your schema's literal types. The engine is unchanged:
+checking is the ordinary `check()`.
+
+```typescript
+import {
+  defineSchema,
+  AuthSystem,
+  InMemoryStorageAdapter,
+  withRoleScaffold,
+  RoleRegistry,
+  InMemoryRoleCatalog,
+} from "polizy";
+
+// 1. Your base schema (note the existing `member` group relation)
+const base = defineSchema({
+  relations: {
+    member: { type: "group" },
+    editor: { type: "direct" },
+    viewer: { type: "direct" },
+  },
+  actionToRelations: {
+    edit: ["editor"],
+    view: ["editor", "viewer"],
+    delete: ["editor"],
+  },
+});
+
+// 2. Merge in the role scaffold, declaring which actions are grantable
+const schema = withRoleScaffold(base, {
+  grantable: ["edit", "view", "delete"],
+});
+
+// 3. The scaffold's `assignee` relation is auto-excluded from group inference,
+//    so `member` is still the inferred default — name it to be explicit.
+const authz = new AuthSystem({
+  schema,
+  storage: new InMemoryStorageAdapter(),
+  defaultGroupRelation: "member",
+});
+
+// 4. Typed sugar over the existing write APIs; catalog keeps empty roles listable
+const roles = new RoleRegistry(authz, schema, {
+  catalog: new InMemoryRoleCatalog(),
+});
+
+const tenant = { type: "workspace", id: "acme" };
+
+// Define a role scoped to the tenant (caps written via one atomic allowMany)
+const editorRole = await roles.defineRole({
+  tenant,
+  name: "content-editor",
+  label: "Content Editor",
+  can: ["edit", "view"], // GrantableAction — typos rejected at COMPILE time
+});
+
+// Assign a user (membership via the `assignee` group relation)
+await roles.assignRole({ type: "user", id: "alice" }, editorRole);
+
+// Toggle a cell in the matrix UI
+await roles.grantToRole(editorRole, "delete");   // add capability
+await roles.revokeFromRole(editorRole, "delete"); // remove capability
+
+// One read backing an "add role + click a cell to toggle" matrix UI
+const matrix = await roles.permissionMatrix(tenant);
+// { permissions: ["edit","view","delete"],
+//   roles: [{ name: "content-editor", label: "Content Editor",
+//             can: Set { "edit", "view" } }] }
+
+// Checking is UNCHANGED — no new verb:
+await authz.check({
+  who: { type: "user", id: "alice" },
+  canThey: "edit",
+  onWhat: { type: "document", id: "doc1" }, // a resource under the tenant
+}); // true, via: user --assignee--> role --cap_edit--> resource
+```
+
+**Roles vs. verbs (the honest boundary):** runtime roles are named bundles of
+**existing** actions — pure data, no schema change. A genuinely **new permission
+verb** with new semantics is still a schema change (true in polizy and every
+ReBAC system). The scaffold covers the common case: a permissions matrix with new
+columns/roles over fixed rows/permissions.
+
+See [references/RUNTIME-ROLES.md](references/RUNTIME-ROLES.md) for the full guide
+(catalogs, `RoleRef`/`roleRef`, `deleteRole` cascades, wildcard roles, per-tenant
+divergence, Prisma `PolizyRole`, and the `nonSubjectTypes` interaction).
+
+---
+
 ## Common Mistakes
 
 | Mistake | Symptom | Fix |
@@ -537,6 +637,7 @@ Each pattern has detailed documentation:
 - [TIME-LIMITED.md](references/TIME-LIMITED.md) - Contractors, expiring access
 - [REVOCATION.md](references/REVOCATION.md) - Removing access patterns
 - [MULTI-TENANT.md](references/MULTI-TENANT.md) - Tenant isolation strategies
+- [RUNTIME-ROLES.md](references/RUNTIME-ROLES.md) - End-user custom roles, permissions matrix
 
 ## Related Skills
 

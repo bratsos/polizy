@@ -1,0 +1,37 @@
+{
+  "name": "example-scale-benchmark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stress-test polizy at scale (tens of thousands of tuples) on Postgres-in-the-browser (PGlite).",
+  "scripts": {
+    "prebuild": "pnpm --filter polizy build",
+    "predev": "pnpm --filter polizy build",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "bench": "node scripts/bench.ts",
+    "cf-deploy": "pnpm run build && wrangler deploy",
+    "cf-preview": "pnpm run build && wrangler dev"
+  },
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.4.6",
+    "polizy": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.1.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.4",
+    "wrangler": "^4.34.0"
+  }
+}

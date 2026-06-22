@@ -7,7 +7,12 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!apps/docs/**"]
+    "includes": [
+      "**",
+      "!apps/docs/**",
+      "!**/dist/**",
+      "!**/client-generated/**"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -4,7 +4,7 @@ description: Setup and installation guide for the polizy authorization library. 
 license: MIT
 metadata:
   author: bratsos
-  version: "0.3.0"
+  version: "0.5.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -234,8 +234,9 @@ const authz = new AuthSystem({
 If you are upgrading an existing project rather than setting up fresh, follow the
 migration guide instead of this skill — the Prisma import/factory and the
 `@@unique` constraint changed, depth-exceeded now throws, `defineSchema` throws
-on bad models, and the library stopped logging to `console`. See
-[migrate-0.1-to-0.2.md](../polizy/migrations/migrate-0.1-to-0.2.md).
+on bad models, and the library stopped logging to `console`. See the
+[migration router](../polizy/migrations/README.md), which applies the relevant
+migration guides in order for your version delta.
 
 ## Next Steps
 
@@ -243,6 +244,11 @@ After setup, use these skills:
 - **[polizy-schema](../polizy-schema/SKILL.md)** - Design your authorization model (relations, actions, multiple group/hierarchy relations, field-level objects)
 - **[polizy-patterns](../polizy-patterns/SKILL.md)** - Implement authorization scenarios
 - **[polizy-storage](../polizy-storage/SKILL.md)** - Production storage setup, custom adapters, performance
+
+> **New in 0.5.0:** polizy adds runtime custom roles — `withRoleScaffold` merges a
+> type-safe role scaffold into your schema (see **[polizy-schema](../polizy-schema/SKILL.md)**),
+> and `RoleRegistry` gives ergonomic, typed sugar for defining/assigning roles built from
+> your existing actions (see **[polizy-patterns](../polizy-patterns/SKILL.md)** for recipes).
 
 ## References
 

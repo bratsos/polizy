@@ -10,6 +10,7 @@ Learn how to model common authorization patterns in your application using poliz
 ## Relationship-Modeling How-Tos
 
 - **[Team & Group Access](./team-access.md)** — Model team-level permissions, manage memberships, and handle nested group structures.
+- **[Runtime Custom Roles](./runtime-roles.md)** — Let end users define their own roles in-app (a permissions matrix) with no schema change, while keeping the action vocabulary type-safe.
 - **[Folder Inheritance](./folder-inheritance.md)** — Propagate access controls down nested document structures and folders.
 - **[Temporary Access](./temporary-access.md)** — Grant time-bound permissions that automatically become active or expire.
 - **[Attribute Conditions (ABAC)](./attribute-conditions.md)** — Combine relationships with dynamic attributes like department or IP address.

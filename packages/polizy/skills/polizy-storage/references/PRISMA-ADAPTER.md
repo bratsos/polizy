@@ -104,6 +104,64 @@ There is no option to point it at a differently named model — the factory take
 only a `PrismaClient` (or an extended client). Keep the model named
 `PolizyTuple`.
 
+## Optional: Role Catalog Table (0.5.0)
+
+This table is **only** needed if you use `RoleRegistry` with a **persistent**
+catalog. Skip it entirely otherwise — runtime roles are pure tuples and live in
+`PolizyTuple` like everything else.
+
+A role's capabilities (`cap_<action>`) and assignments (the `assignee` group
+relation) are ordinary relationship tuples in `PolizyTuple`. The catalog stores
+only **metadata**: a role's existence and its label, so a permission-less role
+stays listable. **The engine never reads the catalog** — `check()`, `explain()`,
+and the rest resolve roles purely from the tuples in your `StorageAdapter`.
+
+Add the model to your `prisma/schema.prisma`:
+
+```prisma
+model PolizyRole {
+  id      String  @id @default(cuid())
+  tenant  String
+  key     String
+  label   String?
+  actions Json
+
+  @@unique([tenant, key])
+  @@index([tenant])
+}
+```
+
+Migrate as usual:
+
+```bash
+npx prisma migrate dev --name add_polizy_roles
+npx prisma generate
+```
+
+Then wire `PrismaRoleCatalog(prisma)` into the `RoleRegistry`:
+
+```typescript
+import { AuthSystem, RoleRegistry } from "polizy";
+import { PrismaAdapter, PrismaRoleCatalog } from "polizy/prisma-storage";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+const authz = new AuthSystem({
+  storage: PrismaAdapter(prisma),
+  schema,
+});
+
+const roles = new RoleRegistry(authz, schema, {
+  catalog: PrismaRoleCatalog(prisma),
+});
+```
+
+Like the tuple adapter, `PrismaRoleCatalog` is a **factory function** exported
+from `polizy/prisma-storage` — call it, no `new`. Omit `catalog` to use the
+in-memory `InMemoryRoleCatalog` (or no catalog at all), in which case roles are
+discoverable only through their tuples.
+
 ## Adapter Behavior (0.3.0)
 
 The Prisma adapter is held to the same shared contract as the in-memory adapter:

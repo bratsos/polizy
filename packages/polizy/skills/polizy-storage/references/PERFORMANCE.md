@@ -463,6 +463,43 @@ async function benchmark() {
 }
 ```
 
+## Benchmarks at scale
+
+The `examples/scale-benchmark` app drives polizy over tens of thousands of tuples
+to demonstrate how each operation scales. **Absolute numbers are
+machine-dependent — the scaling characteristics are the point.** Run the example
+yourself to get figures for your own hardware and storage adapter.
+
+- **`check()` / `explain()` are ~constant-time in table size.** A check touches
+  only the query's subgraph (the subject's reachable set), not the whole table,
+  so latency holds steady as the store grows — roughly **~1ms at both ~7k and
+  ~35k tuples**. Growing the tuple count does not slow an individual check.
+- **`checkMany()` is ~3x faster than N separate `check()` calls.** It shares a
+  single reader across the batch instead of re-establishing one per check. Prefer
+  it whenever you have a list of permission questions to answer together.
+- **`listSubjects` / `listAccessibleObjects` are output-linear and sub-second at
+  scale.** `listSubjects` expands backward from the grant over membership edges,
+  and `listAccessibleObjects` derives each object's action set in one forward
+  sweep — neither runs a per-candidate / per-(object × action) check, so cost
+  scales with the **reachable set / answer size**, not the tuple count. This
+  holds in both depth modes. The one hard requirement is indexing **both** read
+  paths (subject- and object-anchored, above) — an object-anchored read without
+  its index degrades to a full table scan and reintroduces super-linear cost.
+  Still narrow with `ofType` / `canThey` and paginate large results.
+- **`someoneCan` short-circuits**; **`countSubjects` / `countAccessibleObjects`
+  compute the full set today** (`O(reachable)`), so they cost about the same as
+  the corresponding list call.
+- **`preload` is for remote/slow stores, not local ones.** `{ preload: true }`
+  (on the read queries, or `withReadScope({ preload: true })`) fetches the whole
+  tuple set in one read, then resolves in memory — a win only when per-query
+  round-trips dominate (a remote DB, an in-browser DB). Over a properly indexed
+  local store the direct path is already sub-second, so omit it and let each
+  query fetch only the subgraphs it needs.
+
+See `examples/scale-benchmark` for the playground that produces these findings
+(run it **in-memory** — an IndexedDB-backed PGlite measures the browser's disk
+I/O, ~100× the engine's actual cost, not polizy).
+
 ## Best Practices Summary
 
 1. **Index the two hot paths** - `(subjectType, subjectId, relation)` and
