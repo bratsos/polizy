@@ -1,6 +1,6 @@
 {
   "name": "example-scale-benchmark",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Stress-test polizy at scale (tens of thousands of tuples) on Postgres-in-the-browser (PGlite).",

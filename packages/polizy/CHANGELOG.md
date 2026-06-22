@@ -1,5 +1,62 @@
 # polizy
 
+## 0.5.0
+
+### Minor Changes
+
+- 951dca6: Performance: make list operations fast at scale, plus two correctness fixes.
+
+  - **Preloaded reads are now indexed by subject and object** (not only by relation). A point query off a `withReadScope({ preload: true })` set is now `O(deg)` instead of scanning a whole relation bucket. This turns `preload` from a pessimization at scale into the recommended mode for list operations: measured at ~35k tuples, `listSubjects` runs ~30× faster (≈9.7s → ≈0.3s) and `listAccessibleObjects` ~15× faster (≈4.0s → ≈0.3s) when wrapped in a preloaded read scope.
+  - **Shared positive memo for list operations** (`listSubjects` / `listAccessibleObjects`, deny mode): the upward grant path shared across candidates/objects is memoized within an operation instead of re-walked per candidate. Decision-neutral (gated to `maxDepthBehavior: "deny"`, verified against the forward-`check()` ground truth).
+  - **`listAccessibleObjects` builds its parent map from the reachable set** instead of a full per-hierarchy-relation table scan — a fixed startup-cost reduction.
+
+  Correctness fixes (both verified by a forward-`check()` differential):
+
+  - **`listAccessibleObjects` now honors attribute (ABAC) conditions on group memberships.** Previously the group-gather dropped the check context, so an object reachable only through an attribute-conditioned membership could be omitted even when `check()` allowed it.
+  - **`listAccessibleObjects` now includes objects reachable via wildcard (`everyone(type)`) direct grants.** Previously a public grant was honored by `check()` but missing from the list.
+
+  No public API changes; `check()`/`explain()` behavior and performance are unchanged.
+
+- 951dca6: Make list operations scale near-linearly and add existence/count + preload query options.
+
+  `listSubjects` and `listAccessibleObjects` were super-linear in the tuple count; they are now near-linear and sub-second at scale (measured ~76× and ~23× faster at 83k tuples). All changes are decision-neutral, verified by a randomized forward-`check()` differential.
+
+  - **Reverse expansion for `listSubjects`** and **single-pass derivation for `listAccessibleObjects`** (both depth modes): the answer is computed directly from the granting structure instead of running a forward `check()` per candidate / per (object × action). `deny` mode bounds at the depth cap; `throw` mode raises `MaxDepthExceededError` when the query's relevant subgraph is deeper than the cap (a cleaner, deterministic signal than the previous per-candidate behavior — for any graph within the cap, which is the norm, behavior is unchanged). Schemas with field-level objects keep using the gather-then-verify path.
+  - **`preload?: boolean`** option on `listSubjects`, `listAccessibleObjects`, and `checkMany` — fetches the working set once and resolves in memory (equivalent to `withReadScope({ preload: true })`), for remote/slow stores.
+  - **New query variants:** `someoneCan(...)` (existence; short-circuits), `countSubjects(...)`, and `countAccessibleObjects(...)`.
+
+  Correctness fixes (caught by the differential, affect both old and new paths):
+
+  - `listAccessibleObjects` now honors objects reachable via a **wildcard grant to a group-acting type** (e.g. `everyone("team")` is a viewer → members of any team can view), and `listSubjects` likewise surfaces those subjects. Previously `check()` allowed it but the lists omitted it.
+
+  Custom storage adapters should index **both** read paths — `(subjectType, subjectId, relation)` and `(objectType, objectId, relation)`. Relying on a single `@@unique` covers only subject-anchored reads; object-anchored reads (the list gather) otherwise fall back to full table scans. The bundled Prisma adapter already ships both indexes; the example PGlite adapters now do too.
+
+- 951dca6: Add runtime custom roles — let end users create and assign roles in-app, with no schema change or redeploy, while keeping the action vocabulary compile-time type-safe.
+
+  New APIs:
+
+  - `withRoleScaffold(schema, { grantable })` — merges a generic role scaffold (a `role` object type, a reserved `assignee` group relation, and one `cap_<action>` direct relation per grantable action) into a schema, preserving its literal types.
+  - `RoleRegistry<S>` — ergonomic, typed sugar over the existing write APIs: `defineRole`, `grantToRole`, `revokeFromRole`, `assignRole`, `unassignRole`, `deleteRole`, `roleRef`, `getRolePermissions`, `listRoleMembers`, `listRoles`, and `permissionMatrix` (backs an "add role + click-to-toggle" UI in one read). Roles are pure tuples resolved by the existing group + hierarchy + direct traversal — no new engine concepts. The set of grantable actions stays a compile-time `GrantableAction<S>` union; only the role name is a runtime string, and roles are returned as a branded `RoleRef`.
+  - `RoleCatalogStore` + `InMemoryRoleCatalog`, and `PrismaRoleCatalog` (from `polizy/prisma-storage`, backed by a new optional `PolizyRole` table) — track role existence and labels so permission-less roles remain listable. The engine never reads the catalog.
+
+  Engine additions (all backward compatible):
+
+  - `AuthSystem` now accepts `defaultGroupRelation` / `defaultHierarchyRelation`, and a schema's `assignee` scaffold relation is excluded from `addMember`/`setParent` inference — so opting into the role scaffold does not break existing single-group-relation `addMember` calls.
+  - Wildcard memberships now propagate through group recursion: assigning `everyone(type)` to a group/role grants every subject of that type (previously silently ignored).
+  - New `nonSubjectTypes` option (auto-populated with the scaffold's `role` type) keeps role objects from leaking into `listSubjects` results unless requested via `ofType`.
+
+  Two new example apps (both run a real Postgres in the browser via PGlite): `examples/permissions-matrix` (runtime role CRUD, per-tenant divergence, wildcard roles, live check + explain) and `examples/scale-benchmark` (performance playground over tens of thousands of tuples, showing that `check`/`explain` stay ~constant-time while `listSubjects`/`listAccessibleObjects` scale with the reachable set).
+
+### Patch Changes
+
+- 951dca6: Docs, shipped-skill corrections, and hosted live demos.
+
+  - **Hosted live demos**, embedded in the docs site under a new **Demos** section, each running a real Postgres in the browser via PGlite: the runtime-roles **permissions matrix** (`permissions.polizy.dev`) and the **scale benchmark** (`bench.polizy.dev`), alongside the existing full demo (`demo.polizy.dev`).
+  - **Shipped-skill corrections** (the `skills/` directory is published to npm): the storage performance reference still described the pre-optimization list-operation algorithm (`~O(candidates × check)`, "`preload` is a pessimization at scale") — corrected to the current behavior (reverse expansion / single-pass derivation are output-linear in **both** depth modes; index both read paths; `preload` is for remote/slow stores). Documented the `someoneCan` / `countSubjects` / `countAccessibleObjects` queries and the `preload` option in the skills and the 0.4→0.5 migration guide.
+  - **JSDoc corrections** for `someoneCan` and the internal list dispatch, which described the fast paths as deny-mode-only; they run in both modes (`throw` raises on depth-cap truncation).
+
+  Documentation only — no engine or public API behavior changes.
+
 ## 0.4.1
 
 ### Patch Changes
