@@ -370,7 +370,7 @@ A runnable demo (permissions matrix UI + headless walkthrough) lives in
 
 ## Custom storage adapters
 
-Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package ships a shared contract test suite you can run against your adapter. Optionally implement `withSnapshot` to enable `consistency: "strong"` (see [Consistency & read-after-write](#consistency--read-after-write)); without it, strong checks transparently fall back to live reads.
+Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package publishes its shared contract test suite at `polizy/storage-tests` — `import { defineStorageAdapterTestSuite } from "polizy/storage-tests"` and run it against your adapter (it registers node:test cases; see src for the expected context shape). Optionally implement `withSnapshot` to enable `consistency: "strong"` (see [Consistency & read-after-write](#consistency--read-after-write)); without it, strong checks transparently fall back to live reads.
 
 ## Limitations
 

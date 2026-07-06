@@ -8,6 +8,7 @@ const packageJson = JSON.parse(readFileSync("./package.json", "utf8"));
 const external = [
   ...Object.keys(packageJson.dependencies || {}),
   ...Object.keys(packageJson.peerDependencies || {}),
+  /^node:/,
 ];
 
 const tsPlugin = (options = {}) =>
@@ -46,6 +47,7 @@ export default [
     input: "./dist/types/index.d.ts",
     output: [{ file: packageJson.types, format: "esm" }],
     plugins: [dts()],
+    external: [/^node:/],
   },
   {
     input: "./src/polizy.prisma.storage.ts",
@@ -72,6 +74,33 @@ export default [
     input: "./dist/types/polizy.prisma.storage.d.ts",
     output: [{ file: "dist/prisma-storage.d.ts", format: "esm" }],
     plugins: [dts()],
-    external: [/@prisma\/client/],
+    external: [/@prisma\/client/, /^node:/],
+  },
+  {
+    input: "./src/polizy.storage.shared-tests.ts",
+    output: {
+      file: "dist/storage-tests.cjs",
+      format: "cjs",
+      sourcemap: true,
+      exports: "named",
+    },
+    plugins: [resolve(), tsPlugin()],
+    external: external,
+  },
+  {
+    input: "./src/polizy.storage.shared-tests.ts",
+    output: {
+      file: "dist/storage-tests.mjs",
+      format: "esm",
+      sourcemap: true,
+    },
+    plugins: [resolve(), tsPlugin()],
+    external: external,
+  },
+  {
+    input: "./dist/types/polizy.storage.shared-tests.d.ts",
+    output: [{ file: "dist/storage-tests.d.ts", format: "esm" }],
+    plugins: [dts()],
+    external: [/^node:/],
   },
 ];

@@ -12,11 +12,5 @@
     "emitDeclarationOnly": true
   },
   "include": ["src/**/*"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "prisma/client-generated",
-    "**/*.test.ts",
-    "src/polizy.storage.shared-tests.ts"
-  ]
+  "exclude": ["node_modules", "dist", "prisma/client-generated", "**/*.test.ts"]
 }
