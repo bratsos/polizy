@@ -2046,14 +2046,34 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     const k = objKey(group);
     if (seen.has(k)) return;
     seen.add(k);
-    for (const groupRelation of this.groupRels) {
-      const members = await reader.findSubjects(
-        group as AnyObject<SchemaObjectTypes<S>>,
-        groupRelation,
-      );
-      for (const member of members) {
-        add(member);
-        await this.collectGroupMembers(member, add, seen, depth + 1, reader);
+    if (group.id === PUBLIC_ID) {
+      // A wildcard `{type, "*"}` matches every concrete group of that type, so
+      // members of ALL groups of this type inherit. Over-inclusion is harmless
+      // because every candidate is confirmed with a forward check afterwards.
+      for (const groupRelation of this.groupRels) {
+        const all = await reader.findTuples({ relation: groupRelation });
+        for (const t of all) {
+          if (t.object.type !== group.type) continue;
+          add(t.subject);
+          await this.collectGroupMembers(
+            t.subject,
+            add,
+            seen,
+            depth + 1,
+            reader,
+          );
+        }
+      }
+    } else {
+      for (const groupRelation of this.groupRels) {
+        const members = await reader.findSubjects(
+          group as AnyObject<SchemaObjectTypes<S>>,
+          groupRelation,
+        );
+        for (const member of members) {
+          add(member);
+          await this.collectGroupMembers(member, add, seen, depth + 1, reader);
+        }
       }
     }
   }
