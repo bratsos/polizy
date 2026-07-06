@@ -17,13 +17,14 @@ const schema = defineSchema({
   fieldLevelObjects: ["document"],
 });
 
-const everyone = (type: string) => ({ type, id: PUBLIC_ID });
+const everyone = <T extends string>(type: T) =>
+  ({ type, id: PUBLIC_ID }) as { type: T; id: string };
 
 describe("listSubjects field-level fallback with wildcard grants to group-acting types", () => {
   it("handles DIRECT wildcard grant and someoneCan / countSubjects / parity guard", async () => {
     const sys = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       defaultCheckDepth: 5,
     });
 
@@ -113,7 +114,7 @@ describe("listSubjects field-level fallback with wildcard grants to group-acting
   it("handles WILDCARD MEMBERSHIP variant", async () => {
     const sys = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       defaultCheckDepth: 5,
     });
 
@@ -160,7 +161,7 @@ describe("listSubjects field-level fallback with wildcard grants to group-acting
   it("handles nested-group depth", async () => {
     const sys = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       defaultCheckDepth: 5,
     });
 

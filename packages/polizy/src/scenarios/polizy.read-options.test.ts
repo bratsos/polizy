@@ -28,7 +28,7 @@ describe("uniform read options scenarios", () => {
   it("checkMany + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
     const requests = [
       { who: USER("alice"), canThey: "view" as const, onWhat: DOC("1") },
@@ -59,7 +59,7 @@ describe("uniform read options scenarios", () => {
   it("checkOrThrow + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
     const request = {
       who: USER("alice"),
@@ -89,7 +89,7 @@ describe("uniform read options scenarios", () => {
   it("explain + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
     const request = {
       who: USER("alice"),
@@ -113,7 +113,7 @@ describe("uniform read options scenarios", () => {
   it("listSubjects/listAccessibleObjects/someoneCan/countSubjects + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
 
     const subArgs = {
@@ -160,7 +160,7 @@ describe("uniform read options scenarios", () => {
 
     assert.deepEqual(listSubStandalone, [USER("alice")]);
     assert.equal(listObjStandalone.accessible.length, 1);
-    assert.deepEqual(listObjStandalone.accessible[0].object, DOC("1"));
+    assert.deepEqual(listObjStandalone.accessible[0]?.object, DOC("1"));
     assert.equal(someoneCanStandalone, true);
     assert.equal(countSubStandalone, 1);
 
@@ -184,7 +184,7 @@ describe("uniform read options scenarios", () => {
   it("listSubjects pagination", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
 
     // Seed 5 subjects on one object.
@@ -216,14 +216,14 @@ describe("uniform read options scenarios", () => {
       ...subArgs,
       limit: 2,
       offset: 1,
-    });
+    } as any);
     assert.equal(count, 5);
   });
 
   it("ReadScope someoneCan/counts deep-equal standalone", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
 
     await authz.allow({ who: USER("alice"), toBe: "viewer", onWhat: DOC("1") });
@@ -258,7 +258,7 @@ describe("uniform read options scenarios", () => {
   it("consistency:strong passthrough on a list op", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
     });
 
     await authz.allow({ who: USER("alice"), toBe: "viewer", onWhat: DOC("1") });

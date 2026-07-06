@@ -39,7 +39,7 @@ describe("Authorization Service example scenarios", () => {
       let peerEndDate: Date;
 
       beforeEach(async () => {
-        storage = new InMemoryStorageAdapter();
+        storage = new InMemoryStorageAdapter<any, any>();
         authz = new AuthSystem({ storage, schema: example6Schema });
         await authz.allow({
           who: { type: "user", id: "manager1" },

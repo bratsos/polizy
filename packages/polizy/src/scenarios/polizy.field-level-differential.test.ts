@@ -79,7 +79,7 @@ describe("field-level randomized differential", () => {
     for (let g = 0; g < 40; g++) {
       const depth = 2 + Math.floor(rand() * 4); // depth cap 2 to 5
       const authz = new AuthSystem({
-        storage: new InMemoryStorageAdapter(),
+        storage: new InMemoryStorageAdapter<any, any>(),
         schema,
         maxDepthBehavior: "deny",
         defaultCheckDepth: depth,
@@ -99,7 +99,11 @@ describe("field-level randomized differential", () => {
             rand() < 0.15
               ? {
                   attributes: [
-                    { attribute: "dept", operator: "eq", value: "eng" },
+                    {
+                      attribute: "dept",
+                      operator: "eq" as const,
+                      value: "eng",
+                    },
                   ],
                 }
               : undefined;
@@ -179,7 +183,7 @@ describe("field-level randomized differential", () => {
               context,
             });
             const actual =
-              keys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type);
+              keys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type as any);
             assert.equal(
               actual,
               expected,
@@ -253,7 +257,7 @@ describe("field-level randomized differential", () => {
                 `seed ${g}: listAccessibleObjects(${who.type}:${who.id}, ${ofType}) actions for ${obj.id}`,
               );
             } else {
-              const baseId = obj.id.split("#")[0];
+              const baseId = obj.id.split("#")[0] ?? "";
               const expectedBaseActions = expectedActionsMap.get(baseId) ?? [];
               assert.deepEqual(
                 expectedActions.slice().sort(),

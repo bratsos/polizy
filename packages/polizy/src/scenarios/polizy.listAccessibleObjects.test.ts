@@ -1,4 +1,4 @@
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { AuthSystem } from "../polizy.ts";
@@ -80,7 +80,7 @@ describe("AuthSystem.listAccessibleObjects", () => {
   const projectX = { type: "project" as const, id: "projectX" };
 
   beforeEach(async () => {
-    storage = new InMemoryStorageAdapter();
+    storage = new InMemoryStorageAdapter<any, any>();
     authz = new AuthSystem({ storage, schema: testSchema });
 
     await authz.allow({ who: alice, toBe: "owner", onWhat: doc1 });

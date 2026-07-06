@@ -109,7 +109,7 @@ describe("withRoleScaffold (end-to-end resolution on the unchanged engine)", () 
 
   it("resolves user --assignee--> role --hierarchy--> workspace --cap--> grant", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       defaultGroupRelation: "member",
     });
@@ -159,7 +159,7 @@ describe("withRoleScaffold (end-to-end resolution on the unchanged engine)", () 
 
   it("a wildcard role assignment grants every user the role's caps", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       defaultGroupRelation: "member",
     });
@@ -185,7 +185,7 @@ describe("withRoleScaffold (end-to-end resolution on the unchanged engine)", () 
 
   it("existing addMember calls still infer the app's `member` relation after scaffolding", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema, // two group relations now (member + assignee)
     });
     // No `as`, no defaultGroupRelation configured: infers `member` because the

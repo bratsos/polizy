@@ -33,7 +33,7 @@ describe("Authorization Service example scenarios", () => {
       let fourMonthsLater: Date;
 
       beforeEach(async () => {
-        storage = new InMemoryStorageAdapter();
+        storage = new InMemoryStorageAdapter<any, any>();
         authz = new AuthSystem({ storage, schema: example3Schema });
 
         await authz.allow({

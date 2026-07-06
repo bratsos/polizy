@@ -34,6 +34,7 @@ describe("PrismaAdapter transactionOptions unit tests", () => {
       transactionOptions: { timeout: 30000, maxWait: 5000 },
     });
 
+    assert.ok(adapterA.withSnapshot);
     await adapterA.withSnapshot(async (reader) => {
       await reader.findTuples({});
     });
@@ -54,6 +55,7 @@ describe("PrismaAdapter transactionOptions unit tests", () => {
       transactionOptions: { timeout: 30000, maxWait: 5000 },
     });
 
+    assert.ok(adapterB.withSnapshot);
     await adapterB.withSnapshot(async (reader) => {
       await reader.findTuples({});
     });
@@ -71,6 +73,7 @@ describe("PrismaAdapter transactionOptions unit tests", () => {
     // Case (c): NO options
     const adapterC = PrismaAdapter(mockPrisma as any);
 
+    assert.ok(adapterC.withSnapshot);
     await adapterC.withSnapshot(async (reader) => {
       await reader.findTuples({});
     });

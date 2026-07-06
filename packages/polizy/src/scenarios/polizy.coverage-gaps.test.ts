@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { SchemaError } from "../errors.ts";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
-import { AuthSystem } from "../polizy.ts";
-import { defineSchema } from "../types.ts";
+import { AuthSystem, type CheckRequest } from "../polizy.ts";
+import {
+  defineSchema,
+  type InputTuple,
+  type SchemaObjectTypes,
+  type SchemaSubjectTypes,
+} from "../types.ts";
 
 const schema = defineSchema({
   subjectTypes: ["user", "team"],
-  objectTypes: ["document", "folder"],
+  objectTypes: ["document", "folder", "team"],
   relations: {
     viewer: { type: "direct" },
     member: { type: "group" },
@@ -43,9 +48,9 @@ describe("coverage-gaps", () => {
       });
 
       // contextual tuple: alice member team1
-      const req = {
+      const req: CheckRequest<typeof schema> = {
         who: { type: "user", id: "alice" },
-        canThey: "view" as const,
+        canThey: "view",
         onWhat: { type: "document", id: "doc" },
       };
 
@@ -77,9 +82,9 @@ describe("coverage-gaps", () => {
       });
 
       // contextual: doc parent folder1
-      const req = {
+      const req: CheckRequest<typeof schema> = {
         who: { type: "user", id: "alice" },
-        canThey: "view" as const,
+        canThey: "view",
         onWhat: { type: "document", id: "doc1" },
       };
 
@@ -107,9 +112,9 @@ describe("coverage-gaps", () => {
       const pastDate = new Date(now - 10000);
       const futureDate = new Date(now + 10000);
 
-      const req = {
+      const req: CheckRequest<typeof schema> = {
         who: { type: "user", id: "alice" },
-        canThey: "view" as const,
+        canThey: "view",
         onWhat: { type: "document", id: "doc" },
       };
 
@@ -147,13 +152,13 @@ describe("coverage-gaps", () => {
     });
 
     it("(d) a contextual tuple with attributes condition evaluated against check context", async () => {
-      const req = {
+      const req: CheckRequest<typeof schema> = {
         who: { type: "user", id: "alice" },
-        canThey: "view" as const,
+        canThey: "view",
         onWhat: { type: "document", id: "doc" },
       };
 
-      const contextualTuples = [
+      const contextualTuples: InputTuple<Subj, Obj>[] = [
         {
           subject: { type: "user", id: "alice" },
           relation: "viewer",

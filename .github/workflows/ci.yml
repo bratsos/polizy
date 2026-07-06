@@ -33,6 +33,10 @@ jobs:
         run: pnpm tsc --noEmit
         working-directory: packages/polizy
 
+      - name: Type check (tests + bench)
+        run: pnpm tsc --noEmit -p tsconfig.tests.json
+        working-directory: packages/polizy
+
       - name: Test
         run: pnpm test
         working-directory: packages/polizy

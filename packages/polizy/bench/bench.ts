@@ -68,7 +68,7 @@ type Obj = "document" | "folder" | "team";
 type Tuple = InputTuple<Sub, Obj>;
 type Check = {
   who: Subject<Sub> | AnyObject<Obj>;
-  canThey: string;
+  canThey: "delete" | "view" | "edit" | "manage" | "share";
   onWhat: AnyObject<Obj>;
 };
 
@@ -285,7 +285,7 @@ async function measureMs(w: Workload, iters: number): Promise<number> {
     samples.push(performance.now() - t0);
   }
   samples.sort((a, b) => a - b);
-  return samples[Math.floor(samples.length / 2)];
+  return samples[Math.floor(samples.length / 2)] ?? 0;
 }
 
 async function main() {

@@ -35,7 +35,7 @@ const schema = defineSchema({
 describe("findGroupsRecursive honors the check context (ABAC parity)", () => {
   it("listAccessibleObjects lists an object reachable via an attribute-conditioned membership when check() allows it", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     // alice is a member of eng-team ONLY when context.department === "eng".
@@ -81,7 +81,7 @@ describe("findGroupsRecursive honors the check context (ABAC parity)", () => {
 
   it("still excludes it when the context does NOT satisfy the membership condition", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await authz.addMember({
@@ -117,7 +117,7 @@ describe("findGroupsRecursive honors the check context (ABAC parity)", () => {
 
   it("time-window-only conditions are unaffected (no context needed)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await authz.addMember({
@@ -170,7 +170,7 @@ async function assertListParity(
           onWhat: obj as never,
         });
         const actual =
-          listedKeys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type);
+          listedKeys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type as any);
         assert.equal(
           actual,
           expected,
@@ -217,7 +217,7 @@ async function assertListParity(
 describe("list fast paths run in throw mode too", () => {
   it("returns the full result for a sub-cap graph in throw mode (no throw)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema, // default maxDepthBehavior: "throw"
     });
     await authz.addMember({
@@ -248,7 +248,7 @@ describe("list fast paths run in throw mode too", () => {
 
   it("throws MaxDepthExceededError when the graph is deeper than the cap (throw mode)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       maxDepthBehavior: "throw",
       defaultCheckDepth: 3,
@@ -284,7 +284,7 @@ describe("list fast paths run in throw mode too", () => {
 
   it("the same deep graph in deny mode bounds instead of throwing", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       maxDepthBehavior: "deny",
       defaultCheckDepth: 3,
@@ -337,7 +337,7 @@ describe("exists / count query variants (#5)", () => {
   for (const mode of ["deny", "throw"] as const) {
     it(`someoneCan matches listSubjects().length>0 (${mode} mode)`, async () => {
       const authz = new AuthSystem({
-        storage: new InMemoryStorageAdapter(),
+        storage: new InMemoryStorageAdapter<any, any>(),
         schema,
         maxDepthBehavior: mode,
       });
@@ -377,7 +377,7 @@ describe("exists / count query variants (#5)", () => {
 
   it("countSubjects / countAccessibleObjects equal the list lengths", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       maxDepthBehavior: "deny",
     });
@@ -431,7 +431,7 @@ describe("preload option on list ops (#2)", () => {
 
   it("listSubjects returns the same result with and without preload", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await seed(authz);
@@ -458,7 +458,7 @@ describe("preload option on list ops (#2)", () => {
 
   it("listAccessibleObjects returns the same result with and without preload", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await seed(authz);
@@ -487,7 +487,7 @@ describe("preload option on list ops (#2)", () => {
 
   it("checkMany returns the same result with and without preload", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await seed(authz);
@@ -613,7 +613,7 @@ describe("shared positive memo parity (Design C)", () => {
 
   it("list ops equal forward check() in deny mode (sharedPos active)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       maxDepthBehavior: "deny",
     });
@@ -623,7 +623,7 @@ describe("shared positive memo parity (Design C)", () => {
 
   it("list ops equal forward check() in default throw mode (sharedPos inactive)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await buildGraph(authz);
@@ -632,7 +632,7 @@ describe("shared positive memo parity (Design C)", () => {
 
   it("respects the depth cap: a chain past the cap is denied identically by check and list (deny mode)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
       maxDepthBehavior: "deny",
       defaultCheckDepth: 3,
@@ -740,7 +740,7 @@ describe("randomized differential: deny-mode list ops == forward check()", () =>
     for (let g = 0; g < 120; g++) {
       const depth = 1 + Math.floor(rand() * 6); // stress small caps
       const authz = new AuthSystem({
-        storage: new InMemoryStorageAdapter(),
+        storage: new InMemoryStorageAdapter<any, any>(),
         schema: richSchema,
         maxDepthBehavior: "deny",
         defaultCheckDepth: depth,
@@ -749,67 +749,63 @@ describe("randomized differential: deny-mode list ops == forward check()", () =>
       const grants = 4 + Math.floor(rand() * 10);
       for (let i = 0; i < grants; i++) {
         const roll = rand();
-        try {
-          if (roll < 0.35) {
-            // direct grant (sometimes wildcard, sometimes time-conditioned)
-            const who =
-              rand() < 0.15 ? everyone(pick(["user", "team"])) : pick(subjects);
-            const cond =
-              rand() < 0.15
-                ? { validUntil: new Date(Date.now() + 3_600_000) }
-                : undefined;
-            await authz.allow({
-              who: who as never,
-              toBe: pick(directRels),
-              onWhat: pick(objects) as never,
-              when: cond,
-            });
-          } else if (roll < 0.6) {
-            // group membership (member or orgMember), sometimes wildcard/nested
-            const rel = pick(["member", "orgMember"] as const);
-            const member =
-              rand() < 0.12
-                ? everyone("user")
-                : pick([
-                    ...users.map((id) => ({ type: "user", id })),
-                    ...teams.map((id) => ({ type: "team", id })),
-                  ]);
-            const group =
-              rel === "orgMember"
-                ? pick(orgs.map((id) => ({ type: "org", id })))
-                : pick(teams.map((id) => ({ type: "team", id })));
-            await authz.addMember({
-              member: member as never,
-              group: group as never,
-              as: rel,
-            });
-          } else if (roll < 0.85) {
-            // hierarchy link (parent or orgParent)
-            const rel = pick(["parent", "orgParent"] as const);
-            const child = pick([
-              ...docs.map((id) => ({ type: "doc", id })),
-              ...folders.map((id) => ({ type: "folder", id })),
-            ]);
-            const parent =
-              rel === "orgParent"
-                ? pick(orgs.map((id) => ({ type: "org", id })))
-                : pick(folders.map((id) => ({ type: "folder", id })));
-            await authz.setParent({
-              child: child as never,
-              parent: parent as never,
-              as: rel,
-            });
-          } else {
-            // field-level grant on a doc (doc is not field-enabled here, so this
-            // just exercises ids containing '#' staying literal — safe)
-            await authz.allow({
-              who: pick(subjects) as never,
-              toBe: pick(directRels),
-              onWhat: pick(objects) as never,
-            });
-          }
-        } catch {
-          // ignore invalid random combinations
+        if (roll < 0.35) {
+          // direct grant (sometimes wildcard, sometimes time-conditioned)
+          const who =
+            rand() < 0.15 ? everyone(pick(["user", "team"])) : pick(subjects);
+          const cond =
+            rand() < 0.15
+              ? { validUntil: new Date(Date.now() + 3_600_000) }
+              : undefined;
+          await authz.allow({
+            who: who as never,
+            toBe: pick(directRels),
+            onWhat: pick(objects) as never,
+            when: cond,
+          });
+        } else if (roll < 0.6) {
+          // group membership (member or orgMember), sometimes wildcard/nested
+          const rel = pick(["member", "orgMember"] as const);
+          const member =
+            rand() < 0.12
+              ? everyone("user")
+              : pick([
+                  ...users.map((id) => ({ type: "user", id })),
+                  ...teams.map((id) => ({ type: "team", id })),
+                ]);
+          const group =
+            rel === "orgMember"
+              ? pick(orgs.map((id) => ({ type: "org", id })))
+              : pick(teams.map((id) => ({ type: "team", id })));
+          await authz.addMember({
+            member: member as never,
+            group: group as never,
+            as: rel,
+          });
+        } else if (roll < 0.85) {
+          // hierarchy link (parent or orgParent)
+          const rel = pick(["parent", "orgParent"] as const);
+          const child = pick([
+            ...docs.map((id) => ({ type: "doc", id })),
+            ...folders.map((id) => ({ type: "folder", id })),
+          ]);
+          const parent =
+            rel === "orgParent"
+              ? pick(orgs.map((id) => ({ type: "org", id })))
+              : pick(folders.map((id) => ({ type: "folder", id })));
+          await authz.setParent({
+            child: child as never,
+            parent: parent as never,
+            as: rel,
+          });
+        } else {
+          // field-level grant on a doc (doc is not field-enabled here, so this
+          // just exercises ids containing '#' staying literal — safe)
+          await authz.allow({
+            who: pick(subjects) as never,
+            toBe: pick(directRels),
+            onWhat: pick(objects) as never,
+          });
         }
       }
 
@@ -831,7 +827,7 @@ describe("randomized differential: deny-mode list ops == forward check()", () =>
               onWhat: obj as never,
             });
             const actual =
-              keys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type);
+              keys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type as any);
             assert.equal(
               actual,
               expected,
@@ -887,7 +883,7 @@ describe("listAccessibleObjects reachable-only parent map (Design F1)", () => {
       hierarchyPropagation: { view: ["view"], edit: ["edit"] },
     });
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema: multiHier,
       defaultHierarchyRelation: "folderParent",
     });
@@ -920,7 +916,7 @@ describe("listAccessibleObjects reachable-only parent map (Design F1)", () => {
 
   it("a document with no parent reports parent: undefined", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await authz.allow({
@@ -939,7 +935,7 @@ describe("listAccessibleObjects reachable-only parent map (Design F1)", () => {
 
   it("honors conditions on the parent link", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter(),
+      storage: new InMemoryStorageAdapter<any, any>(),
       schema,
     });
     await authz.allow({

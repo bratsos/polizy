@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "emitDeclarationOnly": false
+  },
+  "include": ["src/**/*", "bench/**/*"],
+  "exclude": ["node_modules", "dist", "prisma/client-generated"]
+}

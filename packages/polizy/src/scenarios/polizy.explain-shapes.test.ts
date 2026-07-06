@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { AuthSystem } from "../polizy.ts";
-import { defineSchema, everyone } from "../types.ts";
+import {
+  defineSchema,
+  everyone,
+  type SchemaObjectTypes,
+  type SchemaSubjectTypes,
+} from "../types.ts";
 
 const schema = defineSchema({
   subjectTypes: ["user"],

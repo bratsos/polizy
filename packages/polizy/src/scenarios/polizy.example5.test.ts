@@ -32,7 +32,7 @@ describe("Authorization Service example scenarios", () => {
       let authz: AuthSystem<typeof example5Schema>;
 
       beforeEach(async () => {
-        storage = new InMemoryStorageAdapter();
+        storage = new InMemoryStorageAdapter<any, any>();
         authz = new AuthSystem({ storage, schema: example5Schema });
 
         await authz.allow({
