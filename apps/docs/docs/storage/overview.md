@@ -16,7 +16,7 @@ An adapter is responsible for the persistence of relationship **tuples**. A tupl
 {user: "alice"}   owner        {document: "readme"}
 ```
 
-Every time you modify permissions (via `authz.allow()` or `authz.revoke()`) or run check queries (via `authz.check()`), the engine coordinates with the configured storage adapter.
+Every time you modify permissions (via `authz.allow()` or `authz.disallowAllMatching()`) or run check queries (via `authz.check()`), the engine coordinates with the configured storage adapter.
 
 ---
 

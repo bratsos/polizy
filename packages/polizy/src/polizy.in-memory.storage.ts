@@ -254,10 +254,8 @@ export class InMemoryStorageAdapter<
     was?: Relation;
     onWhat?: AnyObject<O>;
   }) {
+    // Guard against empty filters to prevent deleting all tuples in the store.
     if (!filter.who && !filter.was && !filter.onWhat) {
-      console.warn(
-        "InMemoryStorageAdapter.delete called with an empty filter. No tuples deleted.",
-      );
       return 0;
     }
 

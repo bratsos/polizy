@@ -65,7 +65,7 @@ ls turbo.json nx.json 2>/dev/null
 
 If it's a monorepo, run `grep -rl '"polizy"' --include=package.json` from the
 root to find every workspace that depends on `polizy`. **Code** migrations apply
-to each; the **Prisma schema** migration (the `@@unique` in 0.1→0.2) runs once,
+to each; the **Prisma schema** migration (the `@@unique` in 0.2→0.3) runs once,
 in whichever workspace owns the database.
 
 ## Step 1 — Detect the currently installed version

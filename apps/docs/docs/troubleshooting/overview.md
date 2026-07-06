@@ -92,17 +92,21 @@ For more information, see [How Checks Resolve](../core-concepts/how-checks-resol
 
 * **Symptom:** Duplicate relationship tuples appear in your database, or upsert writes fail with unique constraint violations.
 * **Cause:** The database is missing the compound unique constraint on the tuple table. Without this constraint, the database cannot safely deduplicate writes.
-* **Fix:** Add the required `@@unique` block to your Prisma model:
-  1. Open your `schema.prisma` file and add the constraint to the model representing your tuples:
+* **Fix:** Add the required `PolizyTuple` model to your Prisma schema:
+  1. Open your `schema.prisma` file and add the model:
      ```prisma
-     model Tuple {
+     model PolizyTuple {
+       id          String  @id @default(cuid())
        subjectType String
        subjectId   String
        relation    String
        objectType  String
        objectId    String
+       condition   Json?
 
        @@unique([subjectType, subjectId, relation, objectType, objectId])
+       @@index([subjectType, subjectId, relation])
+       @@index([objectType, objectId, relation])
      }
      ```
   2. Run `prisma generate` to update the client.
@@ -116,12 +120,16 @@ For more information, see [Prisma Storage Adapter](../storage/prisma.md).
 
 * **Symptom:** You use an object ID containing a `#` (e.g., `document:doc1#summary`) but permissions from the base object (`doc1`) do not flow to the field, or the ID is treated as a literal string.
 * **Cause:** Starting in version 0.3.0, field splitting is opt-in for safety. IDs containing `#` are treated as literal strings unless the object type is explicitly listed in `fieldLevelObjects`.
-* **Fix:** Add the object type to the `fieldLevelObjects` array in your `AuthSystem` configuration:
+* **Fix:** Add the object type to the `fieldLevelObjects` array in your schema definition:
   ```ts
+  const schema = defineSchema({
+    // ...
+    fieldLevelObjects: ["document"], // Opt-in to enable splitting for this type
+  });
+
   const authz = new AuthSystem({
     storage,
     schema,
-    fieldLevelObjects: ["document"], // Opt-in to enable splitting for this type
   });
   ```
 
@@ -136,7 +144,7 @@ For more information, see [Field-Level Permissions](../guides/field-level-permis
 * **Fix:** Explicitly specify the relation name using the `as` option. Inference only works when there is exactly one group or hierarchy relation in the schema:
   ```ts
   // If your schema defines both "member" and "admin_member" relations
-  await authz.addMember(user, group, { as: "member" });
+  await authz.addMember({ member: user, group, as: "member" });
   ```
 
 ---

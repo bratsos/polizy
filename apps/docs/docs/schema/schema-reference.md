@@ -45,6 +45,9 @@ For a task-oriented guide on how to configure your schema, see [Defining a Schem
 | `maxDepthBehavior` | `"throw" \| "deny"` | No | `"throw"` | Action when recursion exceeds maximum depth. `"throw"` raises a `MaxDepthExceededError`. `"deny"` returns `false`. |
 | `logger` | `Logger` | No | No-op logger | Logger instance (e.g. `console`) used to write debug or execution details. |
 | `fieldSeparator` | `string` | No | Schema's separator or `"#"` | Overrides the character used to separate object IDs from field names. |
+| `defaultGroupRelation` | `string` | No | Inferred | Relation `addMember`/`removeMember` use when no `as` is given and the schema declares more than one group relation. |
+| `defaultHierarchyRelation` | `string` | No | Inferred | Relation `setParent`/`removeParent` use when no `as` is given and the schema declares more than one hierarchy relation. |
+| `nonSubjectTypes` | `string[]` | No | `[]` | Object types never surfaced as subjects by `listSubjects` unless explicitly requested via `ofType` (the role scaffold's `role` type is added automatically). |
 
 ---
 
