@@ -283,4 +283,47 @@ describe("RoleRegistry", () => {
     assert.ok(keys.includes("user:alice"));
     assert.ok(!keys.some((k) => k.startsWith("role:")));
   });
+
+  it("rejects tenant ids containing '/' in roleRef and defineRole", async () => {
+    const badTenant = { type: "workspace", id: "a/b" } as const;
+    assert.throws(() => roles.roleRef(badTenant, "ops"), SchemaError);
+    await assert.rejects(
+      () =>
+        roles.defineRole({
+          tenant: badTenant,
+          name: "ops",
+          can: ["view_bookings"],
+        }),
+      SchemaError,
+    );
+  });
+
+  it("ensures tenants 'a' and 'ab' remain isolated in permissionMatrix", async () => {
+    const tenantA = { type: "workspace", id: "a" } as const;
+    const tenantAB = { type: "workspace", id: "ab" } as const;
+
+    await roles.defineRole({
+      tenant: tenantA,
+      name: "ops",
+      can: ["view_bookings"],
+    });
+
+    await roles.defineRole({
+      tenant: tenantAB,
+      name: "ops",
+      can: ["view_finances"],
+    });
+
+    const matrixA = await roles.permissionMatrix(tenantA);
+    const matrixAB = await roles.permissionMatrix(tenantAB);
+
+    const opsA = matrixA.roles.find((r) => r.name === "ops");
+    const opsAB = matrixAB.roles.find((r) => r.name === "ops");
+
+    assert.ok(opsA);
+    assert.ok(opsAB);
+
+    assert.deepEqual([...opsA.can].sort(), ["view_bookings"]);
+    assert.deepEqual([...opsAB.can].sort(), ["view_finances"]);
+  });
 });

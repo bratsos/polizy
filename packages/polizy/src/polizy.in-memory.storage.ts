@@ -218,6 +218,15 @@ function snapshotReader<S extends SubjectType, O extends ObjectType>(
   };
 }
 
+/**
+ * An in-memory implementation of {@link StorageAdapter}.
+ *
+ * Results returned by methods like {@link findTuples} are live references to the stored
+ * objects themselves, rather than deep copies, to maximize performance. Modifying these
+ * objects directly will corrupt the store and its internal indexes silently. You should
+ * treat all returned tuples as immutable, or use {@link withSnapshot} to obtain an
+ * isolated, consistent point-in-time copy.
+ */
 export class InMemoryStorageAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
