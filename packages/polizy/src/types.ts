@@ -55,11 +55,25 @@ export type AttributeOperator =
  * An attribute-based predicate evaluated against the `context` passed to
  * `check()`. `attribute` is a dot-path into the context object.
  */
-export type AttributePredicate = {
-  attribute: string;
-  operator: AttributeOperator;
-  value: JsonScalar | JsonScalar[];
-};
+export type AttributePredicate =
+  | {
+      /** Matches when the context attribute equals the given value. */
+      attribute: string;
+      operator: "eq" | "ne";
+      value: JsonScalar;
+    }
+  | {
+      /** Matches when the context attribute is in or not in the given array of values. */
+      attribute: string;
+      operator: "in" | "nin";
+      value: JsonScalar[];
+    }
+  | {
+      /** Matches when the context attribute is compared numerically to the given number. */
+      attribute: string;
+      operator: "gt" | "gte" | "lt" | "lte";
+      value: number;
+    };
 
 /**
  * Constraints attached to a tuple. A tuple only grants access while its
@@ -125,7 +139,9 @@ export interface AuthSchema<
   > = Readonly<Record<string, ReadonlyArray<string>>>,
   HierarchyProp extends
     | Readonly<
-        Record<keyof ActionRelations, ReadonlyArray<keyof ActionRelations>>
+        Partial<
+          Record<keyof ActionRelations, ReadonlyArray<keyof ActionRelations>>
+        >
       >
     | undefined = undefined,
   ValidSubjectTypes extends SubjectType = SubjectType,
@@ -194,7 +210,9 @@ export function defineSchema<
   const ObjT extends ObjectType,
   const HierarchyProp extends
     | Readonly<
-        Record<keyof ActionRelations, ReadonlyArray<keyof ActionRelations>>
+        Partial<
+          Record<keyof ActionRelations, ReadonlyArray<keyof ActionRelations>>
+        >
       >
     | undefined = undefined,
 >(schema: {
@@ -266,6 +284,14 @@ export interface ListAccessibleObjectsArgs<
 
   context?: Record<string, any>;
 
+  /**
+   * Bounds only the group-membership expansion of the subject closure (how many
+   * nested-group hops from `who` are explored). It does NOT bound hierarchy hops.
+   * Total check/path depth (group + hierarchy hops) is always governed and capped
+   * by the engine's `defaultCheckDepth`.
+   *
+   * Defaults to `defaultCheckDepth`. This is an advanced, rarely-needed knob.
+   */
   maxDepth?: number;
 }
 
