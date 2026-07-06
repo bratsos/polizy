@@ -50,13 +50,13 @@ so multi-version jumps work.
 | **Action** | Intent: `view`, `edit`, `delete` — mapped to relations |
 | **Condition** | Optional time window (`validSince`/`validUntil`) and/or attribute predicates (ABAC) |
 
-## Capabilities (0.5.0)
+## Capabilities (0.5.x)
 
 - **Checks & queries:** `check`, `checkMany` (batch), `checkOrThrow`, `explain`
   (why allowed/denied), `listAccessibleObjects` (paginated), `listSubjects`
   (reverse — who can do X), `someoneCan` (existence; short-circuits),
   `countSubjects` / `countAccessibleObjects`, `listTuples` (paginated). All the
-  read queries accept `preload?: boolean` (one up-front read; for remote/slow stores).
+  read queries accept `preload`, `consistency`, and `contextualTuples` uniformly.
 - **Writes (idempotent):** `allow`, `allowMany`, `disallowAllMatching`,
   `addMember`/`removeMember`, `setParent`/`removeParent`. Use `as` to pick a
   relation when the schema declares more than one group/hierarchy relation.

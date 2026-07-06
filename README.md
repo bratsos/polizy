@@ -283,6 +283,8 @@ await authz.check({
 }); // true, even before the grant is committed
 ```
 
+Contextual tuples (and `consistency`/`preload`) are accepted uniformly across `check`/`checkMany`/`checkOrThrow`/`explain` and the list/count/existence queries, and `withReadScope` accepts scope-wide `contextualTuples`.
+
 ## Field-level permissions
 
 For object types listed in `fieldLevelObjects`, an id may carry a field after the separator (default `#`): `document:doc1#summary`. A grant on the **base** object (`doc1`) authorizes its fields (`doc1#summary`) via direct, group, **and** hierarchy paths, while a grant on a specific field stays scoped to that field.
