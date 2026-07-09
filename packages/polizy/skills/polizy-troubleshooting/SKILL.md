@@ -4,7 +4,7 @@ description: Debug and fix polizy authorization issues. Use when permission chec
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -442,6 +442,9 @@ console.dir(await authz.explain({ who: alice, canThey: "edit", onWhat: doc }),
   { depth: null });
 ```
 
+> [!NOTE]
+> `explain()` never throws `MaxDepthExceededError`. Past the depth cap, it returns `{ allowed: false, via: null }` even in `"throw"` mode.
+
 See [CHECK-ALGORITHM.md](references/CHECK-ALGORITHM.md) for how to read the
 `via` node kinds (`direct`, `wildcard`, `group`, `hierarchy`, `field`).
 
@@ -457,11 +460,16 @@ All errors extend `PolizyError`; import the specific classes from `"polizy"`.
 | `SchemaError: Schema declares multiple 'group'/'hierarchy' relations (...); specify which via 'as'.` | >1 group/hierarchy relation, `as` omitted | Pass `as: "<relation>"` |
 | `SchemaError` from `defineSchema` | Action maps to an undefined relation, or `hierarchyPropagation` references an undefined action | Fix the dangling reference |
 | `SchemaError: Invalid field id '...'` | Empty base or field around the separator on a field-enabled type | Use `base#field` with both non-empty |
+| `SchemaError: Tenant id cannot contain "/"` | Tenant id contains a slash during role mapping (`roleRef` or `defineRole`) | Ensure tenant ids avoid `/` |
 | `MaxDepthExceededError` | Group/hierarchy chain exceeds `defaultCheckDepth` | Raise depth, fix data, or `maxDepthBehavior: "deny"` |
 | `NotAuthorizedError` | `checkOrThrow` denied | Expected — catch it and return 403 |
 | `ConfigurationError: Storage adapter is required.` | Missing `storage` | Provide storage in constructor |
 | `ConfigurationError: Authorization schema is required.` | Missing `schema` | Provide schema in constructor |
 | `StorageError` | Adapter operation failed (e.g. Prisma DB error) | Inspect `.cause`; check DB/migration |
+
+### Condition Shape Hardening (0.6.0)
+
+If you have malformed condition shapes stored in your database, they will **fail closed (deny access)** instead of throwing a runtime `TypeError` during the check evaluation. Ensure your conditions follow the strict typing of `Condition` objects.
 
 ## Anti-Patterns to Avoid
 

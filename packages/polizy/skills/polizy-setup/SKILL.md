@@ -4,7 +4,7 @@ description: Setup and installation guide for the polizy authorization library. 
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -243,12 +243,9 @@ migration guides in order for your version delta.
 After setup, use these skills:
 - **[polizy-schema](../polizy-schema/SKILL.md)** - Design your authorization model (relations, actions, multiple group/hierarchy relations, field-level objects)
 - **[polizy-patterns](../polizy-patterns/SKILL.md)** - Implement authorization scenarios
-- **[polizy-storage](../polizy-storage/SKILL.md)** - Production storage setup, custom adapters, performance
+- **[polizy-storage](../polizy-storage/SKILL.md)** - Production storage setup, custom adapters (validated with the published `polizy/storage-tests` suite), performance
 
-> **New in 0.5.0:** polizy adds runtime custom roles — `withRoleScaffold` merges a
-> type-safe role scaffold into your schema (see **[polizy-schema](../polizy-schema/SKILL.md)**),
-> and `RoleRegistry` gives ergonomic, typed sugar for defining/assigning roles built from
-> your existing actions (see **[polizy-patterns](../polizy-patterns/SKILL.md)** for recipes).
+> **New in 0.6.0:** polizy simplifies setup under TypeScript by allowing bare `new InMemoryStorageAdapter()` / `PrismaAdapter(client)` to compose directly with literal-typed schemas under strict type-checking, removing variance generic artifacts.
 
 ## References
 

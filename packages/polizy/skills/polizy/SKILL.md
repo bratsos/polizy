@@ -4,7 +4,7 @@ description: Router for the polizy authorization library. Use when the user ment
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -50,13 +50,16 @@ so multi-version jumps work.
 | **Action** | Intent: `view`, `edit`, `delete` — mapped to relations |
 | **Condition** | Optional time window (`validSince`/`validUntil`) and/or attribute predicates (ABAC) |
 
-## Capabilities (0.5.x)
+## Capabilities (0.6.x)
 
 - **Checks & queries:** `check`, `checkMany` (batch), `checkOrThrow`, `explain`
-  (why allowed/denied), `listAccessibleObjects` (paginated), `listSubjects`
-  (reverse — who can do X), `someoneCan` (existence; short-circuits),
-  `countSubjects` / `countAccessibleObjects`, `listTuples` (paginated). All the
-  read queries accept `preload`, `consistency`, and `contextualTuples` uniformly.
+  (why allowed/denied; now accepts an optional 2nd arg and never throws `MaxDepthExceededError`),
+  `listAccessibleObjects` (paginated), `listSubjects` (paginated via `limit`/`offset` after deterministic sort),
+  `someoneCan` (existence; short-circuits), `countSubjects` / `countAccessibleObjects` (always unpaginated),
+  `listTuples` (paginated). All public and `ReadScope` queries accept uniform `ReadOptions`
+  (`consistency`, `preload`, and `contextualTuples`). Note that `checkMany` shares contextual tuples batch-wide (per-request not supported),
+  and `withReadScope` operations accept no per-operation read options.
+- **Contract Test Suite:** Validate custom adapters using the published `polizy/storage-tests` suite.
 - **Writes (idempotent):** `allow`, `allowMany`, `disallowAllMatching`,
   `addMember`/`removeMember`, `setParent`/`removeParent`. Use `as` to pick a
   relation when the schema declares more than one group/hierarchy relation.
@@ -88,7 +91,7 @@ so multi-version jumps work.
 | Define or change the model (relations, actions, fields, hierarchy) | `polizy-schema` |
 | Implement a scenario (team access, inheritance, temp access, revocation, fields) | `polizy-patterns` |
 | End-user / runtime custom roles, permissions matrix (`RoleRegistry`) | `polizy-patterns` (schema setup via `withRoleScaffold` in `polizy-schema`) |
-| Storage adapters (InMemory, Prisma, custom), performance, production | `polizy-storage` |
+| Storage adapters (InMemory, Prisma, custom), `polizy/storage-tests`, performance, production | `polizy-storage` |
 | Debug unexpected allow/deny, errors | `polizy-troubleshooting` |
 | **Upgrade polizy between versions** | [`migrations/README.md`](./migrations/README.md) |
 

@@ -326,10 +326,7 @@ await storage.write(
 
 ## Pagination
 
-`listTuples(filter, { limit, offset })` and
-`listAccessibleObjects({ ..., limit, offset })` accept pagination. Use it for
-admin/audit views and any background sweep — never load an unbounded list into
-memory.
+`listTuples(filter, { limit, offset })`, `listAccessibleObjects({ ..., limit, offset })`, and `listSubjects({ ..., limit, offset })` accept pagination. Use them for admin/audit views and any background sweep — never load an unbounded list into memory.
 
 ```typescript
 // One page of a user's tuples
@@ -345,11 +342,17 @@ const { accessible } = await authz.listAccessibleObjects({
   limit: 100,
   offset: 0,
 });
+
+// Page through subjects that can view a document (ordered deterministically)
+const subjects = await authz.listSubjects({
+  canThey: "view",
+  onWhat: { type: "document", id: "doc1" },
+  limit: 50,
+  offset: 0,
+});
 ```
 
-Pages are returned in a stable order, so `offset`-stepping does not overlap or
-skip rows. (`listAccessibleObjects` already scales with the subject's reachable
-set rather than the whole table — pagination just bounds the response payload.)
+Pages are returned in a stable order, so `offset`-stepping does not overlap or skip rows. Note that `listSubjects` applies the limit and offset after a deterministic sort of the results. Corresponding count APIs like `countSubjects` and `countAccessibleObjects` are always unpaginated and return the total count.
 
 ## Cleanup Strategies
 
@@ -489,12 +492,7 @@ yourself to get figures for your own hardware and storage adapter.
 - **`someoneCan` short-circuits**; **`countSubjects` / `countAccessibleObjects`
   compute the full set today** (`O(reachable)`), so they cost about the same as
   the corresponding list call.
-- **`preload` is for remote/slow stores, not local ones.** `{ preload: true }`
-  (on the read queries, or `withReadScope({ preload: true })`) fetches the whole
-  tuple set in one read, then resolves in memory — a win only when per-query
-  round-trips dominate (a remote DB, an in-browser DB). Over a properly indexed
-  local store the direct path is already sub-second, so omit it and let each
-  query fetch only the subgraphs it needs.
+- **`ReadOptions` (including `preload`) are uniform across all read operations.** The option object `{ consistency?: "default"|"strong"; contextualTuples?; preload?: boolean }` is supported on `check`, `checkMany` (shared batch-wide, per-request not supported), `checkOrThrow`, `explain` (new optional 2nd arg), `listSubjects`, `listAccessibleObjects`, `someoneCan`, `countSubjects`, `countAccessibleObjects`, and `withReadScope` (scope-wide). Operations executed within `withReadScope` accept no per-operation read options since they share a single reader. Note that `{ preload: true }` fetches the whole tuple set in one read and resolves in memory — a win only when per-query round-trips dominate (a remote DB, an in-browser DB). Over a properly indexed local store the direct path is already sub-second, so omit it and let each query fetch only the subgraphs it needs.
 
 See `examples/scale-benchmark` for the playground that produces these findings
 (run it **in-memory** — an IndexedDB-backed PGlite measures the browser's disk

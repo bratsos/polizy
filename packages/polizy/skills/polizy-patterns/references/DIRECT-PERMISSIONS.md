@@ -205,6 +205,34 @@ async function shareDocument(
 }
 ```
 
+### Read-Your-Writes / Contextual Tuples (0.6.0)
+
+For checking permissions against temporary relationship tuples that act as if stored (allowing you to verify access before persisting the tuples to your database), pass `contextualTuples` in `ReadOptions`. 
+
+```typescript
+const canView = await authz.check({
+  who: { type: "user", id: "alice" },
+  canThey: "view",
+  onWhat: { type: "document", id: "doc1" },
+  contextualTuples: [
+    {
+      subject: { type: "user", id: "alice" },
+      relation: "viewer",
+      object: { type: "document", id: "doc1" },
+      // Contextual tuples are raw InputTuples, so constraints ride under `condition`
+      condition: {
+        validUntil: new Date("2026-12-31T23:59:59Z")
+      }
+    }
+  ]
+});
+// => true (even if the tuple is not in the database)
+```
+
+> [!IMPORTANT]
+> - Contextual tuples are raw `InputTuple`s. Therefore, any time/attribute constraints must be placed under the `condition` property (unlike direct grant APIs like `allow`, which take the constraints under `when`).
+> - Per-request contextual tuples are supported on `check`, `checkOrThrow`, `explain` (as an optional second argument), `listSubjects`, `listAccessibleObjects`, `someoneCan`, `countSubjects`, `countAccessibleObjects`, and `withReadScope` (shared batch-wide). They are intentionally **not** supported per-request on `checkMany`.
+
 ### Public / "Anyone with the link"
 
 To grant to *every* subject of a type, use `everyone` as the `who`:

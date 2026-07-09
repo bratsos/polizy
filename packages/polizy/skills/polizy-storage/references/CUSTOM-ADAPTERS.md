@@ -67,6 +67,9 @@ interface StorageAdapter<
 > names), not the schema object. `Relation` is a string. There is no `distinct`
 > option — `findSubjects`/`findObjects` must **always** return de-duplicated
 > results.
+>
+> [!NOTE]
+> `StorageAdapter` has an optional `@internal` phantom `_types` marker (used as a compile-time variance device). Custom adapters never implement it.
 
 ## The Contract (must hold, or `check()` misbehaves)
 
@@ -632,57 +635,21 @@ export class RedisStorageAdapter implements StorageAdapter<any, any> {
 
 ## Testing Your Adapter
 
-polizy validates its own adapters with a shared cross-adapter test suite
-(`defineStorageAdapterTestSuite` in
-`packages/polizy/src/polizy.storage.shared-tests.ts`). It is **not a published
-export** — there is no `polizy/testing` entry point — but it is the source of
-truth for adapter behavior and is the best template to copy.
+polizy publishes its shared cross-adapter test suite via the **`polizy/storage-tests`** subpath. This is the source of truth for adapter behavior and is the recommended way to validate any custom storage adapter.
 
-The cheapest way to vet a custom adapter is to run your adapter against the same
-assertions. At minimum, cover the contract directly with `node:test`:
+The contract suite registers `node:test` cases automatically and exports `TestSubject`, `TestObject`, and `StorageAdapterTestContext` types.
+
+To run the suite against your custom adapter:
 
 ```typescript
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert/strict";
+import { defineStorageAdapterTestSuite } from "polizy/storage-tests";
 import { MyStorageAdapter } from "./my-adapter";
 
-describe("MyStorageAdapter contract", () => {
-  let adapter: MyStorageAdapter;
-  beforeEach(() => { adapter = new MyStorageAdapter(); });
-
-  it("write() is idempotent on the triple and preserves order", async () => {
-    const t = { subject: { type: "user", id: "a" }, relation: "owner",
-                object: { type: "document", id: "d1" } };
-    const [first] = await adapter.write([t]);
-    const [again] = await adapter.write([t]); // re-write same triple
-    assert.equal(again.id, first.id);          // no duplicate
-    const all = await adapter.findTuples({});
-    assert.equal(all.length, 1);
-  });
-
-  it("delete() with explicit `who` does not over-delete", async () => {
-    await adapter.write([
-      { subject: { type: "folder", id: "f1" }, relation: "parent",
-        object: { type: "document", id: "d1" } },
-      { subject: { type: "folder", id: "root" }, relation: "parent",
-        object: { type: "folder", id: "f1" } }, // f1's own parent link
-    ]);
-    await adapter.delete({
-      who: { type: "folder", id: "f1" },
-      was: "parent",
-      onWhat: { type: "document", id: "d1" },
-    });
-    const remaining = await adapter.findTuples({});
-    assert.equal(remaining.length, 1); // root→f1 link must survive
-  });
-
-  it("findTuples() paginates in a stable order", async () => {
-    // write N tuples, then assert offset/limit returns non-overlapping pages
-  });
-
-  it("conditions revive validSince/validUntil to Date on read", async () => {
-    // write a tuple with `when`, read it back, assert instanceof Date
-  });
+defineStorageAdapterTestSuite({
+  getAdapter: async () => new MyStorageAdapter(),
+  cleanup: async () => {
+    // optional cleanup/teardown logic (e.g. flushing DB tables)
+  },
 });
 ```
 

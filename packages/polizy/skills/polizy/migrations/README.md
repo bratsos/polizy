@@ -14,8 +14,8 @@ This skill activates when a user says things like:
 
 The router's job is to figure out **which migration guides to apply, in order**,
 given the version delta — and to apply them **step by step** even across several
-releases (e.g. `0.2.0 → 0.5.0` applies `0.2→0.3`, then `0.3→0.4`, then
-`0.4→0.5`). The user should already have run their package manager's upgrade
+releases (e.g. `0.2.0 → 0.6.0` applies `0.2→0.3`, then `0.3→0.4`, then
+`0.4→0.5`, then `0.5→0.6`). The user should already have run their package manager's upgrade
 command before invoking this; if not, run it for them (see "Package manager
 reference" below).
 

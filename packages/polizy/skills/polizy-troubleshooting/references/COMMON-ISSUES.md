@@ -281,6 +281,10 @@ const authz = new AuthSystem({ storage, schema, maxDepthBehavior: "deny" });
 // returns false instead of throwing; pass a logger to see the warning
 ```
 
+### `explain()` behavior past the depth cap (0.6.0)
+
+Unlike `check()`, `explain()` **never** throws `MaxDepthExceededError`. Past the depth cap, it returns `{ allowed: false, via: null }` even when `maxDepthBehavior` is set to `"throw"`.
+
 **Grant direct permissions for hot paths:**
 ```typescript
 // If alice frequently accesses doc through a deep chain,
@@ -721,3 +725,36 @@ const authz = new AuthSystem({
 
 The library currently logs (via `logger.warn`) on a depth cutoff with
 `maxDepthBehavior: "deny"` and on an empty-filter `disallowAllMatching` call.
+
+---
+
+## Issue 16: SchemaError: Tenant id cannot contain "/"
+
+### Symptom
+
+When defining a role using `defineRole` or mapping via `roleRef`, a `SchemaError` is thrown:
+`SchemaError: Tenant id cannot contain "/"`
+
+### Cause
+
+RoleRegistry now rejects tenant ids containing `/` to prevent cross-tenant permissionMatrix contamination via prefix parsing.
+
+### Fix
+
+Ensure all tenant ids avoid containing the `/` character. If your tenant ids currently contain `/`, you must sanitize or map them to a safe value before calling `defineRole` or `roleRef`.
+
+---
+
+## Issue 17: Stored Malformed Conditions Throwing TypeErrors
+
+### Symptom
+
+A check operation fails or throws `TypeError` mid-check when evaluating attributes or time windows.
+
+### Cause
+
+In version 0.5.0 and earlier, malformed condition structures inside the database could cause the check algorithm to crash with a `TypeError` when checking permissions.
+
+### Fix
+
+In version 0.6.0, condition shape validation is hardened (`isConditionValid`). Any malformed condition shape will now fail closed (evaluation returns `false`, denying access) instead of crashing mid-check. Ensure your conditions are clean and follow the correct `Condition` schema to avoid silent denials.

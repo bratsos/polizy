@@ -4,7 +4,7 @@ description: Implementation patterns for polizy authorization. Use when implemen
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -38,6 +38,7 @@ Copy-paste patterns for common authorization scenarios.
 | Share dialog / access audit | Reverse expansion | [Pattern 12](#pattern-12-who-can-access-this-listsubjects) |
 | Debugging "why allowed/denied" | Explain | [Pattern 13](#pattern-13-debugging-with-explain) |
 | End users define their own roles / permissions matrix | Runtime Custom Roles | [references/RUNTIME-ROLES.md](references/RUNTIME-ROLES.md) |
+| Temporary/ephemeral checks | Read-Your-Writes | [Pattern 14](#pattern-14-read-your-writes--contextual-tuples) |
 
 > **0.3.0 quick notes used throughout these patterns**
 >
@@ -472,9 +473,12 @@ hierarchy.
 
 ```typescript
 // Everyone who can view doc1 (direct, via team, via folder, via wildcard)
+// Supports pagination (limit/offset) after a deterministic sort
 const subjects = await authz.listSubjects({
   canThey: "view",
-  onWhat: { type: "document", id: "doc1" }
+  onWhat: { type: "document", id: "doc1" },
+  limit: 50,
+  offset: 0
 });
 // [{ type: "user", id: "alice" }, { type: "user", id: "bob" }, ...]
 
@@ -486,7 +490,7 @@ const users = await authz.listSubjects({
 });
 ```
 
-Pass `context` if any relevant grants use attribute conditions.
+Pass `context` if any relevant grants use attribute conditions. Note that in field-level schemas, `listSubjects`/`someoneCan`/`countSubjects` now correctly surface subjects reachable through `everyone(type)` grants/memberships to group-acting types (which `check()` always allowed, but lists previously omitted).
 
 ---
 
@@ -607,6 +611,34 @@ columns/roles over fixed rows/permissions.
 See [references/RUNTIME-ROLES.md](references/RUNTIME-ROLES.md) for the full guide
 (catalogs, `RoleRef`/`roleRef`, `deleteRole` cascades, wildcard roles, per-tenant
 divergence, Prisma `PolizyRole`, and the `nonSubjectTypes` interaction).
+
+---
+
+## Pattern 14: Read-Your-Writes / Contextual Tuples
+
+Check permissions against temporary relationship tuples that act as if stored, allowing you to verify access (e.g. "read-your-writes" checks) before persisting tuples in the database.
+
+```typescript
+const canView = await authz.check({
+  who: { type: "user", id: "alice" },
+  canThey: "view",
+  onWhat: { type: "document", id: "doc1" },
+  contextualTuples: [
+    {
+      subject: { type: "user", id: "alice" },
+      relation: "viewer",
+      object: { type: "document", id: "doc1" },
+      // Contextual tuples are raw InputTuples, so constraints ride under `condition`
+      condition: {
+        validUntil: new Date("2026-12-31T23:59:59Z")
+      }
+    }
+  ]
+});
+// => true (even if not in the database)
+```
+
+Contextual tuples are raw `InputTuple`s, so time/attribute constraints must be defined under `condition`. Uniform read options supporting `contextualTuples` are accepted on `check`, `checkOrThrow`, `explain`, `listSubjects`, `listAccessibleObjects`, `someoneCan`, `countSubjects`, `countAccessibleObjects`, and `withReadScope` (scope-wide). `checkMany` supports `contextualTuples` only batch-wide (per-request not supported).
 
 ---
 

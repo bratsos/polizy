@@ -89,7 +89,14 @@ import { PrismaAdapter } from "polizy/prisma-storage";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
-const storage = PrismaAdapter(prisma);
+const storage = PrismaAdapter(prisma, {
+  // Optional configuration
+  snapshotIsolationLevel: "Serializable", // isolation level for consistency: "strong"
+  transactionOptions: {
+    maxWait: 5000,    // maximum wait time (Prisma default is 2000ms)
+    timeout: 10000,   // timeout for the transaction (Prisma default is 5000ms)
+  }, // raise these for strong-consistency list operations over large stores
+});
 
 const authz = new AuthSystem({
   storage,
@@ -185,6 +192,7 @@ The Prisma adapter is held to the same shared contract as the in-memory adapter:
 - **Pagination.** `findTuples(filter, { limit, offset })` maps to Prisma
   `take`/`skip` with a stable `orderBy: { id: "asc" }`, so paging `listTuples`
   is deterministic.
+- **Condition filter behavior (0.6.0).** Passing `findTuples({ condition: undefined })` with the key present imposes no condition constraint on the query (previously PrismaAdapter filtered by `IS NULL`, which was unreachable through the engine). It now aligns with the in-memory adapter.
 
 ## Index Recommendations
 
