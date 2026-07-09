@@ -173,3 +173,22 @@ For more information, see [Field-Level Permissions](../guides/field-level-permis
   * If using `PrismaStorageAdapter`, pass `snapshotIsolationLevel: "RepeatableRead"` to support isolation (e.g., when running Postgres MVCC).
 
 For more information, see [Consistency](../performance/consistency.md).
+
+---
+
+## Condition predicate evaluation fails or returns false unexpectedly
+
+* **Symptom:** Permission checks with attribute conditions return `false` even though you believe they should succeed, or some conditions are ignored.
+* **Cause:** If your context values do not match the expected type, or if the stored condition JSON shape is malformed (e.g. `attributes` is not an array, predicate entries are null or non-objects, or attribute paths are not strings), polizy will fail closed (deny) instead of throwing an error mid-check.
+* **Fix:**
+  * Verify that the context object passed to `check` matches the expected structure and types (e.g., passing a number for `gt`/`lt`/`gte`/`lte` operators).
+  * Check the database to make sure condition structures are not corrupted or malformed.
+  * Remember that malformed shapes fail closed for safety.
+
+---
+
+## SchemaError when defining dynamic roles (tenant contains "/")
+
+* **Symptom:** Defining a dynamic role with `defineRole` or referencing a role with `roleRef` throws a `SchemaError` at runtime.
+* **Cause:** The tenant ID (e.g. `tenant.id`) contains a forward slash (`/`). To prevent potential cross-tenant authorization matrix leaks via prefix parsing, `RoleRegistry` restricts tenant IDs from containing the `/` character.
+* **Fix:** Rename your tenant ID to avoid using forward slashes (use hyphens, underscores, or other characters instead).

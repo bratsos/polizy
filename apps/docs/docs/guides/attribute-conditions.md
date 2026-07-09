@@ -70,16 +70,25 @@ console.log(canView); // true
 
 The `operator` field supports the following comparison operations:
 
-| Operator | Description | Example Condition |
-| :--- | :--- | :--- |
-| `eq` | Matches if the context value is strictly equal to `value`. | `{ attribute: "status", operator: "eq", value: "active" }` |
-| `ne` | Matches if the context value is not equal to `value`. | `{ attribute: "user.role", operator: "ne", value: "guest" }` |
-| `in` | Matches if the context value is elements of the array in `value`. | `{ attribute: "department", operator: "in", value: ["engineering", "product"] }` |
-| `nin` | Matches if the context value is not in the array in `value`. | `{ attribute: "user.country", operator: "nin", value: ["US", "CA"] }` |
-| `gt` | Matches if the context value is greater than `value`. | `{ attribute: "user.age", operator: "gt", value: 18 }` |
-| `gte` | Matches if the context value is greater than or equal to `value`. | `{ attribute: "user.score", operator: "gte", value: 100 }` |
-| `lt` | Matches if the context value is less than `value`. | `{ attribute: "attempts", operator: "lt", value: 5 }` |
-| `lte` | Matches if the context value is less than or equal to `value`. | `{ attribute: "filesize", operator: "lte", value: 1048576 }` |
+| Operator | Description | Value Type | Example Condition |
+| :--- | :--- | :--- | :--- |
+| `eq` | Matches if the context value is strictly equal to `value`. | JSON Scalar (`string` / `number` / `boolean`) | `{ attribute: "status", operator: "eq", value: "active" }` |
+| `ne` | Matches if the context value is not equal to `value`. | JSON Scalar (`string` / `number` / `boolean`) | `{ attribute: "user.role", operator: "ne", value: "guest" }` |
+| `in` | Matches if the context value is elements of the array in `value`. | Array (`string` / `number` / `boolean`)[] | `{ attribute: "department", operator: "in", value: ["engineering", "product"] }` |
+| `nin` | Matches if the context value is not in the array in `value`. | Array (`string` / `number` / `boolean`)[] | `{ attribute: "user.country", operator: "nin", value: ["US", "CA"] }` |
+| `gt` | Matches if the context value is greater than `value`. | `number` | `{ attribute: "user.age", operator: "gt", value: 18 }` |
+| `gte` | Matches if the context value is greater than or equal to `value`. | `number` | `{ attribute: "user.score", operator: "gte", value: 100 }` |
+| `lt` | Matches if the context value is less than `value`. | `number` | `{ attribute: "attempts", operator: "lt", value: 5 }` |
+| `lte` | Matches if the context value is less than or equal to `value`. | `number` | `{ attribute: "filesize", operator: "lte", value: 1048576 }` |
+
+:::important[TypeScript Type Safety]
+
+The condition predicate is a per-operator discriminated union (`AttributePredicate`) under TypeScript:
+* `eq` and `ne` accept only a single JSON scalar value. Attempting to match arrays using `eq` or `ne` is a compile-time type error (and evaluates to false at runtime).
+* `in` and `nin` accept only an array of JSON scalar values.
+* `gt`, `gte`, `lt`, and `lte` accept only a number.
+
+:::
 
 ---
 
@@ -114,11 +123,14 @@ Requires this attribute condition:
 
 If a check evaluates a grant with an attribute condition, but the required value is missing from the `context` parameter or has a mismatched type, **the condition immediately fails** (fail-closed).
 
+Similarly, **malformed condition shapes** in the storage backend (e.g. `attributes` not being an array, null or non-object predicate entries, or non-string attribute paths) will **fail closed (deny)** instead of throwing a runtime error mid-check.
+
 :::
 
 For example:
 - If a grant requires `user.tier` to be `"premium"`, but your `check()` call only passes `{}` as the context, it will return `false`.
 - If a grant requires `user.age` to be `gte: 18` (number), but you pass `{ user: { age: "18" } }` (string), the check will fail.
+- If a tuple's condition shape is corrupted or malformed in your database, permissions check evaluates it as false/deny without crashing the request.
 
 Always ensure the `context` properties provided in `check()` match the structures expected by your grants' attribute conditions.
 

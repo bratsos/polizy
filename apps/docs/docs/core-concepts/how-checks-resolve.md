@@ -63,6 +63,7 @@ To protect your application from runaway queries or excessively deep hierarchies
 * If a path exceeds this limit, polizy looks at the `maxDepthBehavior` configuration:
   * `"throw"` (default): Throws a `MaxDepthExceededError`. This is the recommended "fail-closed" behavior that alerts you to schema or data loops.
   * `"deny"`: Quietly logs a warning and terminates the path as unsuccessful (evaluating to `false`).
+* **Exception for `explain()`**: The `explain()` API never throws `MaxDepthExceededError`. Because it is a diagnostic interface, it fails soft and returns `{ allowed: false, via: null }` if the cap is exceeded, even if `maxDepthBehavior` is configured to `"throw"`.
 
 ---
 

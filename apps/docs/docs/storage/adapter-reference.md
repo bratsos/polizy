@@ -26,6 +26,8 @@ The `StorageAdapter` interface defines the boundary between the polizy execution
 
 In the signatures above, `S` represents the union of valid subject types, and `O` represents the union of valid object types, as defined in your schema.
 
+Additionally, the `StorageAdapter` interface carries an optional `@internal` phantom `_types` property as a compile-time variance device. Custom adapters do not need to implement or define this property.
+
 :::
 
 ---
@@ -143,3 +145,13 @@ The matching logic must evaluate to:
 * When `withSnapshot` is called, the adapter must open a transaction/snapshot block at the database level.
 * All queries called on the provided `reader` parameter during `withSnapshot` must execute within that isolation level.
 * For relational databases, this should map to `RepeatableRead` (PostgreSQL) or similar read-only snapshot transaction levels.
+
+### Find Tuples Condition Filtering Contract
+* When querying stored tuples via `findTuples(filter)`:
+* If the `condition` field in the filter object is explicitly present but its value is `undefined` (e.g. `{ subject: ..., condition: undefined }`), the adapter must apply **no** condition constraint. This means it must return matching tuples regardless of whether they have a condition or not (it must not filter for tuples where the condition is null).
+
+---
+
+## Verification & Testing
+
+To ensure your adapter satisfies these operational contracts, polizy publishes a shared cross-adapter test suite via `polizy/storage-tests`. You can import `defineStorageAdapterTestSuite` to run these exact assertions against your implementation. For a setup guide and example snippet, see [Writing a Custom Adapter](custom-adapter.md#testing-your-adapter).

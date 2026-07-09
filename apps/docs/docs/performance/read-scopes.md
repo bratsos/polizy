@@ -39,16 +39,47 @@ const view = await authz.withReadScope(async (scope) => {
 }, { preload: true });
 ```
 
-### Shared Reader Behavior
+### Shared Reader Behavior & Read Options
 
 Inside the callback, the following scope methods share the same reader:
 *   `scope.check`
 *   `scope.checkMany`
 *   `scope.explain`
 *   `scope.listAccessibleObjects`
-*   `scope.listSubjects`
+*   `scope.listSubjects` (supporting `limit` and `offset` pagination)
+*   `scope.someoneCan`
+*   `scope.countSubjects`
+*   `scope.countAccessibleObjects`
+
+*(Note: `listTuples` is deliberately absent from the read scope interface, as it performs raw storage reads instead of engine-based queries).*
 
 Any subject, object, or relation tuple retrieved by one of these calls is cached in memory. Subsequent calls within the scope will resolve matching relations from this in-memory cache without hitting database storage again.
+
+:::important[No Per-Operation Read Options]
+
+Within a read scope, the scope operations deliberately accept **no** read options of their own (such as `consistency`, `contextualTuples`, or `preload`). Instead, they are carried scope-wide by the scope's single shared reader. You must pass these options directly to the `withReadScope` call:
+
+```ts
+const result = await authz.withReadScope(async (scope) => {
+  // Individual calls here take NO read options in their arguments
+  const docs = await scope.listAccessibleObjects({
+    who: { type: "user", id: "alice" },
+    ofType: "document",
+  });
+  return docs;
+}, {
+  consistency: "strong",
+  contextualTuples: [
+    {
+      subject: { type: "user", id: "alice" },
+      relation: "viewer",
+      object: { type: "document", id: "doc1" },
+    }
+  ],
+});
+```
+
+:::
 
 ---
 

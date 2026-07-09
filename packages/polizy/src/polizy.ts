@@ -583,7 +583,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   /**
    * Explain why a check is allowed or denied, returning the granting path.
    * Unlike check, explain never raises MaxDepthExceededError on depth; past the
-   * depth cap it fails soft and returns { allowed: false, via: null } even under
+   * depth cap it fails soft and returns `{ allowed: false, via: null }` even under
    * maxDepthBehavior "throw".
    */
   async explain(

@@ -73,13 +73,14 @@ Hierarchies allow permissions to flow from parents to children, which is incredi
 This is configured via `hierarchyPropagation`, which conceptually maps **child actions** to the **parent actions** that grant them.
 
 For example:
-```typescript
+```ts
 hierarchyPropagation: {
   view: ["view"],  // If you can view the parent folder, you can view the child document
   edit: ["edit"],  // If you can edit the parent folder, you can edit the child document
-  delete: [],      // Deleting the parent folder does not grant deletion of the child document
 }
 ```
+
+Note that `hierarchyPropagation` is a **partial** map: you only need to list actions that actually propagate down the hierarchy. Actions that are omitted (such as `delete`) do not propagate, eliminating the need to pad them with empty arrays.
 
 When checking if a user can `view` a document, polizy:
 1. Looks for direct grants on the document.

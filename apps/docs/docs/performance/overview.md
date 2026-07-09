@@ -18,6 +18,7 @@ Every authorization query in polizy executes through a specialized, per-operatio
 *   **Broad Range Reads**: Instead of querying the database for a single edge at a time, polizy requests broader ranges of related tuples once and resolves the rest of the path in memory.
 *   **Per-Check Memoization**: Within a single query, polizy caches sub-graph traversal results. If a check traverses the same subject, object, or relation along different evaluation paths, it hits your storage database only a handful of times, rather than querying it once for every single edge.
 *   **Shared Batch Reads**: When checking multiple permissions at once using `checkMany`, polizy shares a single reader instance across the entire batch, collapsing what would be dozens of separate database calls into a few optimized queries.
+*   **Uniform Read Options**: Every query and check method in polizy accepts a uniform set of read options: `{ consistency?: "default" | "strong"; contextualTuples?: InputTuple[]; preload?: boolean }` to configure snapshot isolation, draft mock data, or preloading.
 
 :::tip[Why wide and deep graphs stay cheap]
 

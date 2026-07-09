@@ -22,14 +22,18 @@ polizy supports two consistency modes, enabling you to choose between performanc
 
 ## How to Use Strong Consistency
 
-To enforce snapshot consistency for a check, pass the `consistency: "strong"` option. This ensures that every read performed during the evaluation comes from the exact same snapshot, **without blocking concurrent writers**.
+To enforce snapshot consistency for a query, pass the `consistency: "strong"` option. This ensures that every read performed during the evaluation comes from the exact same snapshot, **without blocking concurrent writers**.
 
-### In Single Checks
+The `consistency` option is supported uniformly across all query and read methods:
+* **Inline on the request**: `check` and `checkOrThrow`.
+* **In the options argument**: `checkMany` and `explain`.
+* **In the arguments object**: `listSubjects`, `listAccessibleObjects`, `someoneCan`, `countSubjects`, and `countAccessibleObjects`.
+* **In the options argument of scopes**: `withReadScope` (which configures a scope-wide consistency level for all its operations).
 
-You can pass the consistency option directly to `check` or `checkMany`:
+### In Single Checks & Queries
 
 ```ts
-// Enforce strong consistency for a single check
+// Enforce strong consistency for a single check (inline)
 await authz.check({ 
   who, 
   canThey: "edit", 
@@ -37,9 +41,16 @@ await authz.check({
   consistency: "strong" 
 });
 
-// Enforce strong consistency for a batch of checks
+// Enforce strong consistency for a batch of checks (options argument)
 await authz.checkMany(requests, { 
   consistency: "strong" 
+});
+
+// Enforce strong consistency for a list query (arguments object)
+await authz.listAccessibleObjects({
+  who,
+  ofType: "document",
+  consistency: "strong"
 });
 ```
 
@@ -62,15 +73,19 @@ const view = await authz.withReadScope(async (scope) => {
 Strong consistency is powered by the storage adapter's optional `withSnapshot` interface:
 
 *   **In-Memory Adapter**: Copies the internal tuple set when a snapshot is initiated, ensuring later updates are isolated.
-*   **Prisma Adapter**: Runs the entire check operation within a single database transaction. For PostgreSQL (which supports Multi-Version Concurrency Control, or MVCC), you should configure the adapter with `RepeatableRead` isolation to prevent writers from blocking readers and vice-versa:
+*   **Prisma Adapter**: Runs the entire check operation within a single database transaction. For PostgreSQL (which supports Multi-Version Concurrency Control, or MVCC), you should configure the adapter with `RepeatableRead` isolation to prevent writers from blocking readers and vice-versa. You can also customize transaction timing using `transactionOptions`:
     ```ts
     import { PrismaAdapter } from "polizy/prisma-storage";
 
     const storage = PrismaAdapter(prisma, { 
-      snapshotIsolationLevel: "RepeatableRead" 
+      snapshotIsolationLevel: "RepeatableRead",
+      transactionOptions: {
+        maxWait: 5000,
+        timeout: 10000,
+      }
     });
     ```
-    For SQLite, this configuration can be omitted, as SQLite default read transactions behave as snapshots out of the box. For setup details, see the **[Prisma Storage](../storage/prisma.md)** guide.
+    For SQLite, this configuration can be omitted, as SQLite default read transactions behave as snapshots out of the box. For setup details and transaction timeout customization, see the **[Prisma Storage](../storage/prisma.md#customizing-transaction-timeouts)** guide.
 *   **Fallback Behavior**: If a storage adapter does not implement `withSnapshot`, polizy will automatically and transparently fall back to live reads.
 
 ---

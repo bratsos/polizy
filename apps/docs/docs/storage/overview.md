@@ -30,6 +30,7 @@ The `InMemoryStorageAdapter` stores all tuples in a local JavaScript map.
 
 * **Best for:** Local development, unit testing, and learning the library.
 * **Caveat:** All data is lost when your application or test process restarts.
+* **Reference Safety:** Returns live references into its internal store. You should treat returned results as immutable. If you require an isolated, safe copy of the data, use `withSnapshot`.
 * **Import path:** `import { InMemoryStorageAdapter } from "polizy"`
 
 ### 2. Prisma Storage (`PrismaStorageAdapter`)
@@ -48,7 +49,7 @@ If you use a database without a Prisma client (like Redis, DynamoDB, or MongoDB)
 
 :::tip
 
-When writing a custom adapter, you can use polizy's shared test suite to ensure your implementation behaves exactly like the built-in adapters.
+When writing a custom adapter, you can import and run the published test suite from `polizy/storage-tests` to ensure your implementation behaves exactly like the built-in adapters. See [Writing a Custom Adapter](./custom-adapter.md#testing-your-adapter) for details.
 
 :::
 

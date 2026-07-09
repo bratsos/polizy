@@ -113,6 +113,22 @@ const storage = PrismaStorageAdapter(prisma, {
 
 With MVCC (Multi-Version Concurrency Control) databases like PostgreSQL, this ensures that reads in a strong-consistency check are served from a single consistent snapshot, without readers blocking writers or writers blocking readers. 
 
+### Customizing Transaction Timeouts
+
+You can also specify `transactionOptions` to configure the interactive database transaction that handles point-in-time snapshots behind the scenes:
+
+```ts
+const storage = PrismaStorageAdapter(prisma, {
+  snapshotIsolationLevel: "RepeatableRead",
+  transactionOptions: {
+    maxWait: 5000, // Time (in ms) to wait for a connection (default: 2000)
+    timeout: 10000, // Timeout (in ms) for the snapshot transaction (default: 5000)
+  },
+});
+```
+
+Raising these values is recommended for running strong-consistency list operations over large datastores where queries might take longer to resolve, preventing premature transaction timeouts.
+
 For SQLite, this option can be left unset, as SQLite's default read transactions are already snapshots.
 
 For more details on read scopes and strong consistency, see **[Consistency & Read-After-Write](../performance/consistency.md)**.

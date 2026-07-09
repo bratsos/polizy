@@ -137,6 +137,7 @@ const multiHierarchySchema = defineSchema({
   relations: {
     parent: { type: "hierarchy" },
     orgParent: { type: "hierarchy" },
+    viewer: { type: "direct" },
   },
   actionToRelations: {
     view: ["viewer"],
