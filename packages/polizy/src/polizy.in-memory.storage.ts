@@ -232,6 +232,10 @@ export class InMemoryStorageAdapter<
   O extends ObjectType = ObjectType,
 > implements StorageAdapter<S, O>
 {
+  declare readonly _types?: {
+    subject: (s: S) => S;
+    object: (o: O) => O;
+  };
   private store = new TupleStore<S, O>();
 
   async write(tuples: InputTuple<S, O>[]) {

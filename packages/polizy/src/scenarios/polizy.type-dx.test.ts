@@ -28,7 +28,7 @@ describe("Type-level DX improvements", () => {
       },
     });
 
-    const storage = new InMemoryStorageAdapter<any, any>();
+    const storage = new InMemoryStorageAdapter();
     const authz = new AuthSystem({ storage, schema: partialPropSchema });
 
     const parentDoc = { type: "document", id: "parent" } as const;
@@ -162,6 +162,34 @@ describe("Type-level DX improvements", () => {
       true,
     );
   });
+
+  it("allows bare InMemoryStorageAdapter with literal-typed schema and works at runtime", async () => {
+    const literalSchema = defineSchema({
+      subjectTypes: ["user"],
+      objectTypes: ["document"],
+      relations: { owner: { type: "direct" } },
+      actionToRelations: { view: ["owner"] },
+    });
+
+    const storage = new InMemoryStorageAdapter();
+    const authz = new AuthSystem({ storage, schema: literalSchema });
+
+    const user = { type: "user", id: "alice" } as const;
+    const doc = { type: "document", id: "doc1" } as const;
+
+    await authz.allow({
+      who: user,
+      toBe: "owner",
+      onWhat: doc,
+    });
+
+    const canView = await authz.check({
+      who: user,
+      canThey: "view",
+      onWhat: doc,
+    });
+    assert.equal(canView, true);
+  });
 });
 
 // Type assertions wrapper function (not called at runtime)
@@ -195,5 +223,29 @@ export function typeAssertions() {
     value: ["a"],
   };
 
-  return { p1 };
+  // (b) explicitly-parameterized adapters still narrow standalone results
+  const adapterNarrow = new InMemoryStorageAdapter<"user", "doc">();
+  const testNarrowType = async () => {
+    const tuples = await adapterNarrow.findTuples({});
+    const first = tuples[0];
+    if (first) {
+      if (first.subject.type === "user") {
+        const subjectType: "user" = first.subject.type;
+        return subjectType;
+      }
+    }
+  };
+
+  // (c) a WRONGLY-parameterized adapter is still rejected:
+  const wrongSchema = defineSchema({
+    subjectTypes: ["user"],
+    objectTypes: ["document"],
+    relations: { owner: { type: "direct" } },
+    actionToRelations: { view: ["owner"] },
+  });
+  const wrongAdapter = new InMemoryStorageAdapter<"member", "thing">();
+  // @ts-expect-error — wrongly-parameterized adapter must be rejected
+  new AuthSystem({ storage: wrongAdapter, schema: wrongSchema });
+
+  return { p1, testNarrowType };
 }

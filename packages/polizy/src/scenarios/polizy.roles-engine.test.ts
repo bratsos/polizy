@@ -28,7 +28,7 @@ const multiGroup = defineSchema({
 describe("defaultGroupRelation / defaultHierarchyRelation config", () => {
   it("addMember infers the configured default group relation (no `as` needed)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: multiGroup,
       defaultGroupRelation: "member",
     });
@@ -59,7 +59,7 @@ describe("defaultGroupRelation / defaultHierarchyRelation config", () => {
 
   it("setParent infers the configured default hierarchy relation (no `as` needed)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: multiGroup,
       defaultHierarchyRelation: "parent",
     });
@@ -76,7 +76,7 @@ describe("defaultGroupRelation / defaultHierarchyRelation config", () => {
 
   it("an explicit `as` still overrides the configured default", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: multiGroup,
       defaultGroupRelation: "member",
     });
@@ -96,7 +96,7 @@ describe("defaultGroupRelation / defaultHierarchyRelation config", () => {
     assert.throws(
       () =>
         new AuthSystem({
-          storage: new InMemoryStorageAdapter<any, any>(),
+          storage: new InMemoryStorageAdapter(),
           schema: multiGroup,
           defaultGroupRelation: "viewer",
         }),
@@ -127,7 +127,7 @@ const nonSubjectSchema = defineSchema({
 describe("nonSubjectTypes filtering in listSubjects", () => {
   it("excludes non-subject (e.g. role) objects from listSubjects results", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: nonSubjectSchema,
       nonSubjectTypes: ["role"],
     });
@@ -157,7 +157,7 @@ describe("nonSubjectTypes filtering in listSubjects", () => {
 
   it("still returns non-subject types when ofType explicitly requests them", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: nonSubjectSchema,
       nonSubjectTypes: ["role"],
     });
@@ -181,7 +181,7 @@ describe("nonSubjectTypes filtering in listSubjects", () => {
 describe("wildcard membership (everyone) through group recursion", () => {
   it("a wildcard group membership grants access to every subject of that type", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: wildcardSchema,
     });
     await authz.allow({
@@ -207,7 +207,7 @@ describe("wildcard membership (everyone) through group recursion", () => {
 
   it("explain reports a wildcard membership path", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: wildcardSchema,
     });
     await authz.allow({

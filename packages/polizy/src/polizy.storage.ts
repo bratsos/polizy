@@ -12,6 +12,11 @@ export interface StorageAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
 > {
+  /** @internal Phantom type to enforce generic invariance under strict TypeScript. */
+  readonly _types?: {
+    subject: (s: S) => S;
+    object: (o: O) => O;
+  };
   /**
    * Writes tuples to storage, idempotently. A tuple is identified by its
    * (subject, relation, object) triple: writing one that already exists updates

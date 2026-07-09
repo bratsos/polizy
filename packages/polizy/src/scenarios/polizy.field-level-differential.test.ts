@@ -79,7 +79,7 @@ describe("field-level randomized differential", () => {
     for (let g = 0; g < 40; g++) {
       const depth = 2 + Math.floor(rand() * 4); // depth cap 2 to 5
       const authz = new AuthSystem({
-        storage: new InMemoryStorageAdapter<any, any>(),
+        storage: new InMemoryStorageAdapter(),
         schema,
         maxDepthBehavior: "deny",
         defaultCheckDepth: depth,

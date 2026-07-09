@@ -51,7 +51,7 @@ async function seed(
 ): Promise<AuthSystem<typeof schema>> {
   const sys = new AuthSystem({
     schema,
-    storage: new InMemoryStorageAdapter<any, any>(),
+    storage: new InMemoryStorageAdapter(),
     defaultCheckDepth,
     maxDepthBehavior: "deny",
   });

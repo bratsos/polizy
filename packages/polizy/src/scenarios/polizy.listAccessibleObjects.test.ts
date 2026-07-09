@@ -80,7 +80,7 @@ describe("AuthSystem.listAccessibleObjects", () => {
   const projectX = { type: "project" as const, id: "projectX" };
 
   beforeEach(async () => {
-    storage = new InMemoryStorageAdapter<any, any>();
+    storage = new InMemoryStorageAdapter();
     authz = new AuthSystem({ storage, schema: testSchema });
 
     await authz.allow({ who: alice, toBe: "owner", onWhat: doc1 });

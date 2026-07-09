@@ -50,6 +50,14 @@ describe("AuthSystem Core Tests", () => {
     const minimalSchema = defineSchema({
       relations: {},
       actionToRelations: {},
+      subjectTypes: ["user", "group"] as TestSubjectType[],
+      objectTypes: [
+        "doc",
+        "folder",
+        "org",
+        "group",
+        "system",
+      ] as TestObjectType[],
     });
 
     it("should initialize successfully with valid config", () => {
@@ -101,6 +109,14 @@ describe("AuthSystem Core Tests", () => {
           edit: ["editor"],
           view: ["viewer", "editor"],
         },
+        subjectTypes: ["user", "group"] as TestSubjectType[],
+        objectTypes: [
+          "doc",
+          "folder",
+          "org",
+          "group",
+          "system",
+        ] as TestObjectType[],
       });
       let authSystem: AuthSystem<typeof schema>;
 
@@ -194,6 +210,14 @@ describe("AuthSystem Core Tests", () => {
           edit: ["editor", "owner"],
           delete: ["owner"],
         },
+        subjectTypes: ["user", "group"] as TestSubjectType[],
+        objectTypes: [
+          "doc",
+          "folder",
+          "org",
+          "group",
+          "system",
+        ] as TestObjectType[],
       });
       let authSystem: AuthSystem<typeof schema>;
 
@@ -301,6 +325,14 @@ describe("AuthSystem Core Tests", () => {
           edit: ["edit"],
           delete: ["delete"],
         },
+        subjectTypes: ["user", "group"] as TestSubjectType[],
+        objectTypes: [
+          "doc",
+          "folder",
+          "org",
+          "group",
+          "system",
+        ] as TestObjectType[],
       });
       let authSystem: AuthSystem<typeof schema>;
 
@@ -449,6 +481,14 @@ describe("AuthSystem Core Tests", () => {
           view: ["view"],
           edit: ["edit"],
         },
+        subjectTypes: ["user", "group"] as TestSubjectType[],
+        objectTypes: [
+          "doc",
+          "folder",
+          "org",
+          "group",
+          "system",
+        ] as TestObjectType[],
       });
       let authSystem: AuthSystem<typeof schema>;
 
@@ -523,6 +563,14 @@ describe("AuthSystem Core Tests", () => {
         hierarchyPropagation: {
           view: ["view"],
         },
+        subjectTypes: ["user", "group"] as TestSubjectType[],
+        objectTypes: [
+          "doc",
+          "folder",
+          "org",
+          "group",
+          "system",
+        ] as TestObjectType[],
       });
       let authSystem: AuthSystem<typeof schema>;
       const now = Date.now();
@@ -862,6 +910,14 @@ describe("AuthSystem Core Tests", () => {
           view: ["viewer"],
           comment: [],
         },
+        subjectTypes: ["user", "group"] as TestSubjectType[],
+        objectTypes: [
+          "doc",
+          "folder",
+          "org",
+          "group",
+          "system",
+        ] as TestObjectType[],
       });
       let authSystem: AuthSystem<typeof schema>;
 

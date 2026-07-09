@@ -4,7 +4,7 @@ import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { AuthSystem } from "../polizy.ts";
 import { defineSchema } from "../types.ts";
 
-let storage: InMemoryStorageAdapter<any, any>;
+let storage: InMemoryStorageAdapter;
 
 describe("Authorization Service example scenarios", () => {
   describe("Examples", () => {
@@ -39,7 +39,7 @@ describe("Authorization Service example scenarios", () => {
       let peerEndDate: Date;
 
       beforeEach(async () => {
-        storage = new InMemoryStorageAdapter<any, any>();
+        storage = new InMemoryStorageAdapter();
         authz = new AuthSystem({ storage, schema: example6Schema });
         await authz.allow({
           who: { type: "user", id: "manager1" },

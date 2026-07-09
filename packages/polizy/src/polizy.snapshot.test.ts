@@ -90,7 +90,7 @@ describe("withSnapshot (point-in-time reads)", () => {
     });
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
     await authz.allow({
       who: U("alice"),

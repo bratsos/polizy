@@ -4,7 +4,7 @@ import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { AuthSystem } from "../polizy.ts";
 import { defineSchema } from "../types.ts";
 
-let storage: InMemoryStorageAdapter<any, any>;
+let storage: InMemoryStorageAdapter;
 
 describe("Authorization Service example scenarios", () => {
   describe("Examples", () => {
@@ -32,7 +32,7 @@ describe("Authorization Service example scenarios", () => {
       let authz: AuthSystem<typeof example5Schema>;
 
       beforeEach(async () => {
-        storage = new InMemoryStorageAdapter<any, any>();
+        storage = new InMemoryStorageAdapter();
         authz = new AuthSystem({ storage, schema: example5Schema });
 
         await authz.allow({
@@ -139,10 +139,10 @@ describe("Authorization Service example scenarios", () => {
           }),
         );
 
-        const tomsGroups = await storage.findObjects(
+        const tomsGroups = (await storage.findObjects(
           { type: "user", id: "tom1" },
           "member",
-        );
+        )) as { id: string; type: "group" }[];
         assert.deepStrictEqual(
           tomsGroups.sort((a, b) => a.id.localeCompare(b.id)),
           [

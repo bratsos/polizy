@@ -35,7 +35,7 @@ const schema = defineSchema({
 describe("findGroupsRecursive honors the check context (ABAC parity)", () => {
   it("listAccessibleObjects lists an object reachable via an attribute-conditioned membership when check() allows it", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     // alice is a member of eng-team ONLY when context.department === "eng".
@@ -81,7 +81,7 @@ describe("findGroupsRecursive honors the check context (ABAC parity)", () => {
 
   it("still excludes it when the context does NOT satisfy the membership condition", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await authz.addMember({
@@ -117,7 +117,7 @@ describe("findGroupsRecursive honors the check context (ABAC parity)", () => {
 
   it("time-window-only conditions are unaffected (no context needed)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await authz.addMember({
@@ -217,7 +217,7 @@ async function assertListParity(
 describe("list fast paths run in throw mode too", () => {
   it("returns the full result for a sub-cap graph in throw mode (no throw)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema, // default maxDepthBehavior: "throw"
     });
     await authz.addMember({
@@ -248,7 +248,7 @@ describe("list fast paths run in throw mode too", () => {
 
   it("throws MaxDepthExceededError when the graph is deeper than the cap (throw mode)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
       maxDepthBehavior: "throw",
       defaultCheckDepth: 3,
@@ -284,7 +284,7 @@ describe("list fast paths run in throw mode too", () => {
 
   it("the same deep graph in deny mode bounds instead of throwing", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
       maxDepthBehavior: "deny",
       defaultCheckDepth: 3,
@@ -337,7 +337,7 @@ describe("exists / count query variants (#5)", () => {
   for (const mode of ["deny", "throw"] as const) {
     it(`someoneCan matches listSubjects().length>0 (${mode} mode)`, async () => {
       const authz = new AuthSystem({
-        storage: new InMemoryStorageAdapter<any, any>(),
+        storage: new InMemoryStorageAdapter(),
         schema,
         maxDepthBehavior: mode,
       });
@@ -377,7 +377,7 @@ describe("exists / count query variants (#5)", () => {
 
   it("countSubjects / countAccessibleObjects equal the list lengths", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
       maxDepthBehavior: "deny",
     });
@@ -431,7 +431,7 @@ describe("preload option on list ops (#2)", () => {
 
   it("listSubjects returns the same result with and without preload", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await seed(authz);
@@ -458,7 +458,7 @@ describe("preload option on list ops (#2)", () => {
 
   it("listAccessibleObjects returns the same result with and without preload", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await seed(authz);
@@ -487,7 +487,7 @@ describe("preload option on list ops (#2)", () => {
 
   it("checkMany returns the same result with and without preload", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await seed(authz);
@@ -613,7 +613,7 @@ describe("shared positive memo parity (Design C)", () => {
 
   it("list ops equal forward check() in deny mode (sharedPos active)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
       maxDepthBehavior: "deny",
     });
@@ -623,7 +623,7 @@ describe("shared positive memo parity (Design C)", () => {
 
   it("list ops equal forward check() in default throw mode (sharedPos inactive)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await buildGraph(authz);
@@ -632,7 +632,7 @@ describe("shared positive memo parity (Design C)", () => {
 
   it("respects the depth cap: a chain past the cap is denied identically by check and list (deny mode)", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
       maxDepthBehavior: "deny",
       defaultCheckDepth: 3,
@@ -740,7 +740,7 @@ describe("randomized differential: deny-mode list ops == forward check()", () =>
     for (let g = 0; g < 120; g++) {
       const depth = 1 + Math.floor(rand() * 6); // stress small caps
       const authz = new AuthSystem({
-        storage: new InMemoryStorageAdapter<any, any>(),
+        storage: new InMemoryStorageAdapter(),
         schema: richSchema,
         maxDepthBehavior: "deny",
         defaultCheckDepth: depth,
@@ -883,7 +883,7 @@ describe("listAccessibleObjects reachable-only parent map (Design F1)", () => {
       hierarchyPropagation: { view: ["view"], edit: ["edit"] },
     });
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema: multiHier,
       defaultHierarchyRelation: "folderParent",
     });
@@ -916,7 +916,7 @@ describe("listAccessibleObjects reachable-only parent map (Design F1)", () => {
 
   it("a document with no parent reports parent: undefined", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await authz.allow({
@@ -935,7 +935,7 @@ describe("listAccessibleObjects reachable-only parent map (Design F1)", () => {
 
   it("honors conditions on the parent link", async () => {
     const authz = new AuthSystem({
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       schema,
     });
     await authz.allow({

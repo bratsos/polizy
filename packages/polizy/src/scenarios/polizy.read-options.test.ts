@@ -28,7 +28,7 @@ describe("uniform read options scenarios", () => {
   it("checkMany + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
     const requests = [
       { who: USER("alice"), canThey: "view" as const, onWhat: DOC("1") },
@@ -59,7 +59,7 @@ describe("uniform read options scenarios", () => {
   it("checkOrThrow + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
     const request = {
       who: USER("alice"),
@@ -89,7 +89,7 @@ describe("uniform read options scenarios", () => {
   it("explain + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
     const request = {
       who: USER("alice"),
@@ -113,7 +113,7 @@ describe("uniform read options scenarios", () => {
   it("listSubjects/listAccessibleObjects/someoneCan/countSubjects + contextualTuples", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
 
     const subArgs = {
@@ -184,7 +184,7 @@ describe("uniform read options scenarios", () => {
   it("listSubjects pagination", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
 
     // Seed 5 subjects on one object.
@@ -223,7 +223,7 @@ describe("uniform read options scenarios", () => {
   it("ReadScope someoneCan/counts deep-equal standalone", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
 
     await authz.allow({ who: USER("alice"), toBe: "viewer", onWhat: DOC("1") });
@@ -258,7 +258,7 @@ describe("uniform read options scenarios", () => {
   it("consistency:strong passthrough on a list op", async () => {
     const authz = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
     });
 
     await authz.allow({ who: USER("alice"), toBe: "viewer", onWhat: DOC("1") });

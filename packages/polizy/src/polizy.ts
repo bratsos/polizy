@@ -154,7 +154,9 @@ export type ReadOptions<S extends AuthSchema<any, any, any, any, any>> = {
   /**
    * Ephemeral tuples evaluated as if they were stored — the embeddable way to
    * get read-your-writes (e.g. pass the grant you just made) without a token
-   * protocol. Never persisted.
+   * protocol. Never persisted. Note that contextual tuples are raw InputTuples,
+   * so any condition constraint must be specified under `condition:` (unlike
+   * the `when:` property used in grant verbs).
    */
   contextualTuples?: InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[];
   /**
@@ -234,7 +236,13 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   private readonly fieldFree: boolean;
 
   constructor(config: {
-    storage: StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>;
+    /**
+     * Storage adapter for checking and writing permissions. Accepts a schema-bound
+     * adapter or a wide string-typed adapter, sparing consumers a TS variance artifact.
+     */
+    storage:
+      | StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>
+      | StorageAdapter<SubjectType, ObjectType>;
     schema: S;
     defaultCheckDepth?: number;
     maxDepthBehavior?: "throw" | "deny";
@@ -262,7 +270,11 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     if (!config.schema)
       throw new ConfigurationError("Authorization schema is required.");
 
-    this.storage = config.storage;
+    // Cast wide storage to narrow schema-bound adapter for internal engine use
+    this.storage = config.storage as StorageAdapter<
+      SchemaSubjectTypes<S>,
+      SchemaObjectTypes<S>
+    >;
     this.schema = config.schema;
     this.defaultCheckDepth = config.defaultCheckDepth ?? 20;
     this.maxDepthBehavior = config.maxDepthBehavior ?? "throw";
@@ -568,7 +580,12 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       : undefined;
   }
 
-  /** Explain why a check is allowed or denied, returning the granting path. */
+  /**
+   * Explain why a check is allowed or denied, returning the granting path.
+   * Unlike check, explain never raises MaxDepthExceededError on depth; past the
+   * depth cap it fails soft and returns { allowed: false, via: null } even under
+   * maxDepthBehavior "throw".
+   */
   async explain(
     request: CheckRequest<S>,
     options?: ReadOptions<S>,

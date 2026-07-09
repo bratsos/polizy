@@ -28,7 +28,7 @@ describe("engine regressions", () => {
     const folderB = { type: "folder" as const, id: "b" };
 
     it("terminates hierarchy cycles correctly", async () => {
-      const storage = new InMemoryStorageAdapter<any, any>();
+      const storage = new InMemoryStorageAdapter();
       const sysDeny = new AuthSystem({
         schema,
         storage,
@@ -130,7 +130,7 @@ describe("engine regressions", () => {
     const doc = { type: "document" as const, id: "doc" };
 
     it("evaluates pure group chain at depth boundary", async () => {
-      const storage = new InMemoryStorageAdapter<any, any>();
+      const storage = new InMemoryStorageAdapter();
       const sysDeny = new AuthSystem({
         schema,
         storage,
@@ -218,7 +218,7 @@ describe("engine regressions", () => {
         objectTypes: ["document"],
       });
 
-      const storage = new InMemoryStorageAdapter<any, any>();
+      const storage = new InMemoryStorageAdapter();
       const sysDeny = new AuthSystem({
         schema: schemaHier,
         storage,

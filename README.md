@@ -283,7 +283,7 @@ await authz.check({
 }); // true, even before the grant is committed
 ```
 
-Contextual tuples (and `consistency`/`preload`) are accepted uniformly across `check`/`checkMany`/`checkOrThrow`/`explain` and the list/count/existence queries, and `withReadScope` accepts scope-wide `contextualTuples`.
+Because contextual tuples represent raw relationship tuples, dynamic conditions must be defined under the `condition:` key (unlike the `when:` property taken by grant verbs). Contextual tuples (and `consistency`/`preload`) are accepted uniformly across `check`/`checkMany`/`checkOrThrow`/`explain` and the list/count/existence queries, and `withReadScope` accepts scope-wide `contextualTuples`.
 
 ## Field-level permissions
 

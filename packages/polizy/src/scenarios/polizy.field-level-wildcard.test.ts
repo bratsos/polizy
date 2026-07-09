@@ -24,7 +24,7 @@ describe("listSubjects field-level fallback with wildcard grants to group-acting
   it("handles DIRECT wildcard grant and someoneCan / countSubjects / parity guard", async () => {
     const sys = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       defaultCheckDepth: 5,
     });
 
@@ -114,7 +114,7 @@ describe("listSubjects field-level fallback with wildcard grants to group-acting
   it("handles WILDCARD MEMBERSHIP variant", async () => {
     const sys = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       defaultCheckDepth: 5,
     });
 
@@ -161,7 +161,7 @@ describe("listSubjects field-level fallback with wildcard grants to group-acting
   it("handles nested-group depth", async () => {
     const sys = new AuthSystem({
       schema,
-      storage: new InMemoryStorageAdapter<any, any>(),
+      storage: new InMemoryStorageAdapter(),
       defaultCheckDepth: 5,
     });
 
