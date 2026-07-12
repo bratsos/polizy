@@ -345,7 +345,7 @@ Polizy limits group traversal depth to prevent infinite loops (default: **20**).
 const authz = new AuthSystem({
   storage,
   schema,
-  defaultCheckDepth: 20,  // Default in 0.3.0
+  defaultCheckDepth: 20,  // Default
 });
 ```
 

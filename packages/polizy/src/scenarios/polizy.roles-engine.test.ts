@@ -169,7 +169,7 @@ describe("nonSubjectTypes filtering in listSubjects", () => {
     const subjects = await authz.listSubjects({
       canThey: "view",
       onWhat: { type: "document", id: "d1" },
-      ofType: "role",
+      ofType: "role" as any,
     });
     assert.deepEqual(
       subjects.map((s) => `${s.type}:${s.id}`),

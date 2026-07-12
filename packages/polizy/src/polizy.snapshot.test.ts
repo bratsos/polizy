@@ -37,7 +37,11 @@ describe("withSnapshot (point-in-time reads)", () => {
 
   it("an updated condition mid-operation does not leak into the snapshot", async () => {
     const adapter = new InMemoryStorageAdapter<"user", "document">();
-    const cond = { attributes: { region: { equals: "eu" } } };
+    const cond = {
+      attributes: [
+        { attribute: "region", operator: "eq" as const, value: "eu" },
+      ],
+    };
     await adapter.write([
       {
         subject: U("alice"),
@@ -54,7 +58,11 @@ describe("withSnapshot (point-in-time reads)", () => {
           subject: U("alice"),
           relation: "viewer",
           object: D("1"),
-          condition: { attributes: { region: { equals: "us" } } },
+          condition: {
+            attributes: [
+              { attribute: "region", operator: "eq" as const, value: "us" },
+            ],
+          },
         },
       ]);
       const [tuple] = await snap.findTuples({ object: D("1") });
@@ -64,7 +72,7 @@ describe("withSnapshot (point-in-time reads)", () => {
     assert.deepEqual(snapCondition, cond); // snapshot keeps the original
     const [liveTuple] = await adapter.findTuples({ object: D("1") });
     assert.deepEqual(liveTuple?.condition, {
-      attributes: { region: { equals: "us" } },
+      attributes: [{ attribute: "region", operator: "eq", value: "us" }],
     });
   });
 

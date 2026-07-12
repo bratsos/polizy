@@ -160,4 +160,30 @@ describe("isConditionValid", () => {
     mock.timers.setTime(3_000_000); // now past validUntil
     assert.equal(isConditionValid(c, { dept: "eng" }), false);
   });
+
+  describe("malformed condition shapes fail closed and do not throw", () => {
+    it("handles attributes that is a plain object instead of an array", () => {
+      const c = {
+        attributes: { attribute: "dept", operator: "eq", value: "eng" },
+      } as unknown as Condition;
+      assert.doesNotThrow(() => isConditionValid(c, { dept: "eng" }));
+      assert.equal(isConditionValid(c, { dept: "eng" }), false);
+    });
+
+    it("handles attributes containing a null entry", () => {
+      const c = {
+        attributes: [null],
+      } as unknown as Condition;
+      assert.doesNotThrow(() => isConditionValid(c, { dept: "eng" }));
+      assert.equal(isConditionValid(c, { dept: "eng" }), false);
+    });
+
+    it("handles predicate whose attribute is not a string", () => {
+      const c = {
+        attributes: [{ attribute: 123, operator: "eq", value: "eng" }],
+      } as unknown as Condition;
+      assert.doesNotThrow(() => isConditionValid(c, { dept: "eng" }));
+      assert.equal(isConditionValid(c, { dept: "eng" }), false);
+    });
+  });
 });

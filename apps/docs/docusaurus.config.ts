@@ -84,6 +84,7 @@ const config: Config = {
         ],
         tsconfig: './typedoc.tsconfig.json',
         out: 'docs/api',
+        excludeInternal: true,
         // Make the generated section sort last and read as "API Reference":
         sidebar: { pretty: true },
       },

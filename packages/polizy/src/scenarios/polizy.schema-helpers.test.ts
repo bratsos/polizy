@@ -91,6 +91,23 @@ describe("defineSchema validation", () => {
     );
   });
   it("allows multiple group and hierarchy relations without throwing", () => {
-    assert.doesNotThrow(() => multi);
+    assert.doesNotThrow(() =>
+      defineSchema({
+        subjectTypes: ["user"],
+        objectTypes: ["document", "folder", "team", "org"],
+        relations: {
+          owner: { type: "direct" },
+          viewer: { type: "direct" },
+          member: { type: "group" },
+          orgMember: { type: "group" },
+          folderParent: { type: "hierarchy" },
+          orgParent: { type: "hierarchy" },
+        },
+        actionToRelations: {
+          view: ["viewer", "owner", "member", "orgMember"],
+        },
+        fieldLevelObjects: ["document"],
+      }),
+    );
   });
 });

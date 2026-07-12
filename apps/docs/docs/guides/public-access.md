@@ -74,3 +74,12 @@ console.log(canView); // true
 `everyone("user")` only matches subjects whose type is exactly `"user"`. If you have other subject types in your schema (e.g., `client` or `partner`), they will not match this wildcard unless you also grant access to `everyone("client")` or `everyone("partner")`.
 
 :::
+
+---
+
+## Listing and Counting Public Access
+
+When you query permissions using listing or counting APIs (such as `listSubjects`, `someoneCan`, or `countSubjects`), polizy resolves and surfaces wildcard grants:
+* If access has been granted to `everyone("user")`, `listSubjects` will include the wildcard subject `everyone("user")` in the returned results.
+* `countSubjects` will count the wildcard grant as a single entry.
+* These listings and counts are fully supported for both standard schemas and field-level schemas (e.g., when granting access to `everyone("user")` on a field-level object like `document:doc1#body`).

@@ -410,5 +410,33 @@ export function defineStorageAdapterTestSuite(
         "Should return exactly the requested page size",
       );
     });
+
+    it("findTuples() with an explicitly-undefined condition filter returns tuples with and without conditions", async () => {
+      const subject = { type: "user" as const, id: "cond-test-subject" };
+      await adapter.write([
+        {
+          subject,
+          relation: "viewer",
+          object: { type: "document", id: "doc-with-cond" },
+          condition: { validUntil: new Date(Date.now() + 3_600_000) },
+        },
+        {
+          subject,
+          relation: "viewer",
+          object: { type: "document", id: "doc-without-cond" },
+        },
+      ]);
+
+      const results = await adapter.findTuples({
+        subject,
+        condition: undefined,
+      } as Partial<InputTuple<TestSubject, TestObject>>);
+
+      assert.strictEqual(
+        results.length,
+        2,
+        "Should return both tuples when condition is explicitly undefined",
+      );
+    });
   });
 }

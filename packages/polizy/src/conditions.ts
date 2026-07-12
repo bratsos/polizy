@@ -58,7 +58,8 @@ const compare = (predicate: AttributePredicate, actual: unknown): boolean => {
  * - Time window: `validSince <= now < validUntil` (lower inclusive, upper
  *   exclusive). Values are coerced; unparseable dates are treated as invalid.
  * - Attribute predicates: every predicate must pass against `context`. A missing
- *   context value or a type mismatch fails the predicate.
+ *   context value or a type mismatch fails the predicate. Malformed attribute
+ *   shapes also fail closed.
  *
  * Evaluation never throws — a malformed condition fails closed (denies) rather
  * than aborting the surrounding authorization check.
@@ -81,7 +82,15 @@ export const isConditionValid = (
   }
 
   if (condition.attributes) {
+    if (!Array.isArray(condition.attributes)) return false;
     for (const predicate of condition.attributes) {
+      if (
+        predicate === null ||
+        typeof predicate !== "object" ||
+        typeof predicate.attribute !== "string"
+      ) {
+        return false;
+      }
       if (!compare(predicate, resolvePath(context, predicate.attribute))) {
         return false;
       }

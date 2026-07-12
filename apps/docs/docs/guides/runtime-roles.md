@@ -148,9 +148,10 @@ const matrix = await roles.permissionMatrix({ type: "workspace", id: "acme" });
 // matrix.roles       → [{ name, label, can: Set<action> }, ...] columns
 ```
 
+Note that `permissionMatrix` retrieves **tenant-scoped** capabilities only (i.e. permissions granted on that specific tenant object, such as the workspace). In contrast, the `getRolePermissions(role)` method is broader, reporting capabilities across **all** objects that the role has been granted access on throughout the system.
+
 Other registry methods: `unassignRole`, `deleteRole` (cascades capabilities and
-memberships), `listRoles`, `getRolePermissions`, `listRoleMembers`, and
-`roleRef(tenant, name)`.
+memberships), `listRoles`, `listRoleMembers`, and `roleRef(tenant, name)`.
 
 ## 5. Check permissions
 
@@ -186,6 +187,12 @@ check directly against the workspace object.
 Role ids are tenant-namespaced (`role:acme/billing_manager` vs
 `role:globex/billing_manager`), so two workspaces can define identically-named
 roles with completely different permissions, on one shared `AuthSystem`.
+
+:::important[Tenant ID Restrictions]
+
+The tenant ID (`id`) must not contain the forward slash (`/`) character. To prevent cross-tenant permission matrix contamination via prefix parsing, `defineRole` and `roleRef` will throw a `SchemaError` if the tenant ID contains a `/`.
+
+:::
 
 ## Wildcard roles
 

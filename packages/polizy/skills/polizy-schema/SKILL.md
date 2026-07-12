@@ -4,7 +4,7 @@ description: Schema design guide for polizy authorization. Use when defining rel
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -76,6 +76,8 @@ const schema = defineSchema({
 > or `hierarchyPropagation` references an undefined action, `defineSchema` throws
 > a `SchemaError` at definition time (it no longer `console.warn`s and continues).
 > This catches dangling references the moment your app boots.
+>
+> > **0.6.0 — Partial hierarchyPropagation.** The `hierarchyPropagation` map may be partial (no empty-array padding needed for actions that do not propagate). Invalid keys or values continue to fail at compile time.
 
 ## Relation Types Quick Reference
 
@@ -392,12 +394,13 @@ type Condition = {
   attributes?: AttributePredicate[]; // ALL must pass (logical AND)
 };
 
-type AttributePredicate = {
-  attribute: string;          // dot-path into the check context, e.g. "user.tier"
-  operator: "eq" | "ne" | "in" | "nin" | "gt" | "gte" | "lt" | "lte";
-  value: JsonScalar | JsonScalar[]; // string | number | boolean | null (or array)
-};
+type AttributePredicate =
+  | { attribute: string; operator: "eq" | "ne"; value: JsonScalar }
+  | { attribute: string; operator: "in" | "nin"; value: JsonScalar[] }
+  | { attribute: string; operator: "gt" | "gte" | "lt" | "lte"; value: number };
 ```
+
+> **0.6.0 — Strong Predicate Type-safety.** `AttributePredicate` is now a discriminated union based on the comparison operator. Operations like `eq`/`ne` enforce a scalar type, `in`/`nin` enforce an array type, and inequality operators (`gt`/`gte`/`lt`/`lte`) enforce a number type at compile time. Invalid predicates (e.g. `eq` with an array, which was always false at runtime) are now compile errors.
 
 ```typescript
 // Time-boxed grant

@@ -123,31 +123,65 @@ type ResolveOutcome = {
 };
 
 /**
+ * A request to check a single authorization query.
+ */
+export type CheckRequest<S extends AuthSchema<any, any, any, any, any>> = {
+  /** The subject or object attempting to perform the action. */
+  who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
+  /** The action to check authorization for. */
+  canThey: TypedAction<S>;
+  /** The resource being accessed. */
+  onWhat: AnyObject<SchemaObjectTypes<S>>;
+  /** Optional custom attributes for dynamic policy conditions. */
+  context?: Record<string, unknown>;
+};
+
+/**
+ * Options controlling how read and check operations behave.
+ */
+export type ReadOptions<S extends AuthSchema<any, any, any, any, any>> = {
+  /**
+   * Consistency mode for this query (mirrors OpenFGA's naming).
+   *
+   * - `"default"` reads live: consistent per broadened key via the read
+   *   cache, but not guaranteed across keys, with no snapshot overhead.
+   * - `"strong"` pins every read in the check to one point-in-time snapshot
+   *   for full cross-key consistency — when the storage adapter supports
+   *   snapshots (`withSnapshot`). Adapters without snapshot support fall back
+   *   to live reads. See the read-after-write notes in the docs.
+   */
+  consistency?: "default" | "strong";
+  /**
+   * Ephemeral tuples evaluated as if they were stored — the embeddable way to
+   * get read-your-writes (e.g. pass the grant you just made) without a token
+   * protocol. Never persisted. Note that contextual tuples are raw InputTuples,
+   * so any condition constraint must be specified under `condition:` (unlike
+   * the `when:` property used in grant verbs).
+   */
+  contextualTuples?: InputTuple<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>[];
+  /**
+   * Fetch the whole tuple set up front, then resolve every check in memory.
+   * Worth it when the batch issues many reads over a large working set; skip
+   * it for small batches over a big store (the up-front read won't pay off). For
+   * list operations (`listSubjects` / `listAccessibleObjects`) over a large store,
+   * preload is the recommended mode — it replaces many per-candidate reads with
+   * one pass (equivalent to `withReadScope({ preload: true })`).
+   */
+  preload?: boolean;
+};
+
+/**
  * The read operations exposed inside {@link AuthSystem.withReadScope}. Every
  * call shares ONE read pass, so each (subject | object | relation) is fetched
  * from storage at most once for the whole scope.
+ *
+ * Operation-specific options like consistency, preload, or contextualTuples must
+ * not be passed to scope operations, as they share the single scope-wide reader.
  */
 export interface ReadScope<S extends AuthSchema<any, any, any, any, any>> {
-  check(request: {
-    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    context?: Record<string, unknown>;
-  }): Promise<boolean>;
-  checkMany(
-    requests: Array<{
-      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-      canThey: TypedAction<S>;
-      onWhat: AnyObject<SchemaObjectTypes<S>>;
-      context?: Record<string, unknown>;
-    }>,
-  ): Promise<boolean[]>;
-  explain(request: {
-    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    context?: Record<string, unknown>;
-  }): Promise<ExplainResult>;
+  check(request: CheckRequest<S>): Promise<boolean>;
+  checkMany(requests: CheckRequest<S>[]): Promise<boolean[]>;
+  explain(request: CheckRequest<S>): Promise<ExplainResult>;
   listAccessibleObjects(
     args: ListAccessibleObjectsArgs<S> & { limit?: number; offset?: number },
   ): Promise<ListAccessibleObjectsResult<S>>;
@@ -156,7 +190,22 @@ export interface ReadScope<S extends AuthSchema<any, any, any, any, any>> {
     onWhat: AnyObject<SchemaObjectTypes<S>>;
     ofType?: SchemaSubjectTypes<S>;
     context?: Record<string, unknown>;
+    limit?: number;
+    offset?: number;
   }): Promise<Subject<SchemaSubjectTypes<S>>[]>;
+  someoneCan(args: {
+    canThey: TypedAction<S>;
+    onWhat: AnyObject<SchemaObjectTypes<S>>;
+    ofType?: SchemaSubjectTypes<S>;
+    context?: Record<string, unknown>;
+  }): Promise<boolean>;
+  countSubjects(args: {
+    canThey: TypedAction<S>;
+    onWhat: AnyObject<SchemaObjectTypes<S>>;
+    ofType?: SchemaSubjectTypes<S>;
+    context?: Record<string, unknown>;
+  }): Promise<number>;
+  countAccessibleObjects(args: ListAccessibleObjectsArgs<S>): Promise<number>;
 }
 
 export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
@@ -187,7 +236,13 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   private readonly fieldFree: boolean;
 
   constructor(config: {
-    storage: StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>;
+    /**
+     * Storage adapter for checking and writing permissions. Accepts a schema-bound
+     * adapter or a wide string-typed adapter, sparing consumers a TS variance artifact.
+     */
+    storage:
+      | StorageAdapter<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>
+      | StorageAdapter<SubjectType, ObjectType>;
     schema: S;
     defaultCheckDepth?: number;
     maxDepthBehavior?: "throw" | "deny";
@@ -215,7 +270,11 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     if (!config.schema)
       throw new ConfigurationError("Authorization schema is required.");
 
-    this.storage = config.storage;
+    // Cast wide storage to narrow schema-bound adapter for internal engine use
+    this.storage = config.storage as StorageAdapter<
+      SchemaSubjectTypes<S>,
+      SchemaObjectTypes<S>
+    >;
     this.schema = config.schema;
     this.defaultCheckDepth = config.defaultCheckDepth ?? 20;
     this.maxDepthBehavior = config.maxDepthBehavior ?? "throw";
@@ -329,35 +388,11 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   // Reads
   // ---------------------------------------------------------------------------
 
-  async check(request: {
-    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    context?: Record<string, unknown>;
-    /**
-     * Ephemeral tuples evaluated as if they were stored — the embeddable way to
-     * get read-your-writes (e.g. pass the grant you just made) without a token
-     * protocol. Never persisted.
-     */
-    contextualTuples?: InputTuple<
-      SchemaSubjectTypes<S>,
-      SchemaObjectTypes<S>
-    >[];
-    /**
-     * Consistency mode for this check (mirrors OpenFGA's naming).
-     *
-     * - `"default"` reads live: consistent per broadened key via the read
-     *   cache, but not guaranteed across keys, with no snapshot overhead.
-     * - `"strong"` pins every read in the check to one point-in-time snapshot
-     *   for full cross-key consistency — when the storage adapter supports
-     *   snapshots (`withSnapshot`). Adapters without snapshot support fall back
-     *   to live reads. See the read-after-write notes in the docs.
-     */
-    consistency?: "default" | "strong";
-  }): Promise<boolean> {
+  async check(request: CheckRequest<S> & ReadOptions<S>): Promise<boolean> {
     return this.withReader((reader) => this.resolveCheck(request, reader), {
       contextual: this.toContextual(request.contextualTuples),
       consistency: request.consistency,
+      preload: request.preload,
     });
   }
 
@@ -375,11 +410,10 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
    */
   async withReadScope<T>(
     fn: (scope: ReadScope<S>) => Promise<T>,
-    options?: { consistency?: "default" | "strong"; preload?: boolean },
+    options?: ReadOptions<S>,
   ): Promise<T> {
     return this.withReader(
       async (reader) => {
-        if (options?.preload) await reader.findTuples({});
         const scope: ReadScope<S> = {
           check: (request) => this.resolveCheck(request, reader),
           checkMany: (requests) => this.checkManyWith(requests, reader),
@@ -387,21 +421,24 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
           listAccessibleObjects: (args) =>
             this.listAccessibleObjectsWith(args, reader),
           listSubjects: (args) => this.listSubjectsWith(args, reader),
+          someoneCan: (args) => this.someoneCanWith(args, reader),
+          countSubjects: (args) => this.countSubjectsWith(args, reader),
+          countAccessibleObjects: (args) =>
+            this.countAccessibleObjectsWith(args, reader),
         };
         return fn(scope);
       },
-      { consistency: options?.consistency },
+      {
+        contextual: this.toContextual(options?.contextualTuples),
+        consistency: options?.consistency,
+        preload: options?.preload,
+      },
     );
   }
 
   /** Resolve one check against a given (per-operation) reader. */
   private async resolveCheck(
-    request: {
-      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-      canThey: TypedAction<S>;
-      onWhat: AnyObject<SchemaObjectTypes<S>>;
-      context?: Record<string, unknown>;
-    },
+    request: CheckRequest<S>,
     reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
     sharedNeg?: Set<string>,
     sharedPos?: Map<string, number>,
@@ -478,12 +515,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
   }
 
   /** Like {@link check}, but throws {@link NotAuthorizedError} when denied. */
-  async checkOrThrow(request: {
-    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    context?: Record<string, unknown>;
-  }): Promise<void> {
+  async checkOrThrow(request: CheckRequest<S> & ReadOptions<S>): Promise<void> {
     const allowed = await this.check(request);
     if (!allowed) {
       throw new NotAuthorizedError(
@@ -498,27 +530,18 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
    * Answer several authorization questions at once. Each question is resolved
    * with its own memo (questions may carry different `context`), but every
    * question still benefits from within-question memoization.
+   *
+   * Note: per-request contextual tuples are intentionally not supported — one
+   * reader per batch.
    */
   async checkMany(
-    requests: Array<{
-      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-      canThey: TypedAction<S>;
-      onWhat: AnyObject<SchemaObjectTypes<S>>;
-      context?: Record<string, unknown>;
-    }>,
-    options?: {
-      consistency?: "default" | "strong";
-      /**
-       * Fetch the whole tuple set up front, then resolve every check in memory.
-       * Worth it when the batch issues many reads over a large working set; skip
-       * it for small batches over a big store (the up-front read won't pay off).
-       */
-      preload?: boolean;
-    },
+    requests: CheckRequest<S>[],
+    options?: ReadOptions<S>,
   ): Promise<boolean[]> {
     // One shared reader (and snapshot) across the batch: overlapping reads —
     // a subject's grants, a folder's hierarchy — are fetched once for all.
     return this.withReader((reader) => this.checkManyWith(requests, reader), {
+      contextual: this.toContextual(options?.contextualTuples),
       consistency: options?.consistency,
       preload: options?.preload,
     });
@@ -526,12 +549,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
 
   /** `checkMany` against a given reader (so a read scope can share one). */
   private checkManyWith(
-    requests: Array<{
-      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-      canThey: TypedAction<S>;
-      onWhat: AnyObject<SchemaObjectTypes<S>>;
-      context?: Record<string, unknown>;
-    }>,
+    requests: CheckRequest<S>[],
     reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<boolean[]> {
     // Each request keeps its own decision memo (a check is depth-sensitive), but
@@ -562,24 +580,26 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       : undefined;
   }
 
-  /** Explain why a check is allowed or denied, returning the granting path. */
-  async explain(request: {
-    who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    context?: Record<string, unknown>;
-  }): Promise<ExplainResult> {
-    return this.withReader((reader) => this.explainWith(request, reader));
+  /**
+   * Explain why a check is allowed or denied, returning the granting path.
+   * Unlike check, explain never raises MaxDepthExceededError on depth; past the
+   * depth cap it fails soft and returns `{ allowed: false, via: null }` even under
+   * maxDepthBehavior "throw".
+   */
+  async explain(
+    request: CheckRequest<S>,
+    options?: ReadOptions<S>,
+  ): Promise<ExplainResult> {
+    return this.withReader((reader) => this.explainWith(request, reader), {
+      contextual: this.toContextual(options?.contextualTuples),
+      consistency: options?.consistency,
+      preload: options?.preload,
+    });
   }
 
   /** `explain` against a given reader (so a read scope can share one). */
   private async explainWith(
-    request: {
-      who: Subject<SchemaSubjectTypes<S>> | AnyObject<SchemaObjectTypes<S>>;
-      canThey: TypedAction<S>;
-      onWhat: AnyObject<SchemaObjectTypes<S>>;
-      context?: Record<string, unknown>;
-    },
+    request: CheckRequest<S>,
     reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<ExplainResult> {
     const result = await this.explainAccess(
@@ -600,20 +620,19 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
    * Candidates are gathered from direct holders, group members (transitively),
    * and the object's hierarchy ancestors, then each is confirmed with `check`.
    */
-  async listSubjects(args: {
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    ofType?: SchemaSubjectTypes<S>;
-    context?: Record<string, unknown>;
-    /**
-     * Fetch the whole tuple set up front so the reverse expansion resolves in
-     * memory — the recommended mode for this operation over a large store, as it
-     * replaces many per-candidate reads with one pass. Equivalent to running
-     * inside `withReadScope({ preload: true })`.
-     */
-    preload?: boolean;
-  }): Promise<Subject<SchemaSubjectTypes<S>>[]> {
+  async listSubjects(
+    args: {
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      ofType?: SchemaSubjectTypes<S>;
+      context?: Record<string, unknown>;
+      limit?: number;
+      offset?: number;
+    } & ReadOptions<S>,
+  ): Promise<Subject<SchemaSubjectTypes<S>>[]> {
     return this.withReader((reader) => this.listSubjectsWith(args, reader), {
+      contextual: this.toContextual(args.contextualTuples),
+      consistency: args.consistency,
       preload: args.preload,
     });
   }
@@ -624,27 +643,37 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
    * subject rather than enumerating the whole set (field-level schemas fall back
    * to the gather-then-confirm path).
    */
-  async someoneCan(args: {
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    ofType?: SchemaSubjectTypes<S>;
-    context?: Record<string, unknown>;
-    preload?: boolean;
-  }): Promise<boolean> {
-    return this.withReader(
-      async (reader) => {
-        if (this.fieldFree) {
-          const hit = await this.reverseExpandSubjects(args, reader, {
-            earlyExit: true,
-          });
-          return hit.length > 0;
-        }
-        return (
-          (await this.listSubjectsViaForwardConfirm(args, reader)).length > 0
-        );
-      },
-      { preload: args.preload },
-    );
+  async someoneCan(
+    args: {
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      ofType?: SchemaSubjectTypes<S>;
+      context?: Record<string, unknown>;
+    } & ReadOptions<S>,
+  ): Promise<boolean> {
+    return this.withReader((reader) => this.someoneCanWith(args, reader), {
+      contextual: this.toContextual(args.contextualTuples),
+      consistency: args.consistency,
+      preload: args.preload,
+    });
+  }
+
+  private async someoneCanWith(
+    args: {
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      ofType?: SchemaSubjectTypes<S>;
+      context?: Record<string, unknown>;
+    },
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+  ): Promise<boolean> {
+    if (this.fieldFree) {
+      const hit = await this.reverseExpandSubjects(args, reader, {
+        earlyExit: true,
+      });
+      return hit.length > 0;
+    }
+    return (await this.listSubjectsViaForwardConfirm(args, reader)).length > 0;
   }
 
   /**
@@ -654,14 +683,33 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
    * `O(reachable)`, not yet sub-linear); a future materialized index can
    * accelerate it without an API change.
    */
-  async countSubjects(args: {
-    canThey: TypedAction<S>;
-    onWhat: AnyObject<SchemaObjectTypes<S>>;
-    ofType?: SchemaSubjectTypes<S>;
-    context?: Record<string, unknown>;
-    preload?: boolean;
-  }): Promise<number> {
-    return (await this.listSubjects(args)).length;
+  async countSubjects(
+    args: {
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      ofType?: SchemaSubjectTypes<S>;
+      context?: Record<string, unknown>;
+    } & ReadOptions<S>,
+  ): Promise<number> {
+    return this.withReader((reader) => this.countSubjectsWith(args, reader), {
+      contextual: this.toContextual(args.contextualTuples),
+      consistency: args.consistency,
+      preload: args.preload,
+    });
+  }
+
+  private async countSubjectsWith(
+    args: {
+      canThey: TypedAction<S>;
+      onWhat: AnyObject<SchemaObjectTypes<S>>;
+      ofType?: SchemaSubjectTypes<S>;
+      context?: Record<string, unknown>;
+    } & { limit?: number; offset?: number },
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+  ): Promise<number> {
+    // counts are over the unpaginated set, so pagination keys are stripped defensively.
+    const { limit: _limit, offset: _offset, ...rest } = args;
+    return (await this.listSubjectsWith(rest, reader)).length;
   }
 
   /**
@@ -670,9 +718,26 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
    * materialized index can accelerate it without an API change.
    */
   async countAccessibleObjects(
-    args: ListAccessibleObjectsArgs<S> & { preload?: boolean },
+    args: ListAccessibleObjectsArgs<S> & ReadOptions<S>,
   ): Promise<number> {
-    return (await this.listAccessibleObjects(args)).accessible.length;
+    return this.withReader(
+      (reader) => this.countAccessibleObjectsWith(args, reader),
+      {
+        contextual: this.toContextual(args.contextualTuples),
+        consistency: args.consistency,
+        preload: args.preload,
+      },
+    );
+  }
+
+  private async countAccessibleObjectsWith(
+    args: ListAccessibleObjectsArgs<S> & { limit?: number; offset?: number },
+    reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
+  ): Promise<number> {
+    // counts are over the unpaginated set, so pagination keys are stripped defensively.
+    const { limit: _limit, offset: _offset, ...rest } = args;
+    return (await this.listAccessibleObjectsWith(rest, reader)).accessible
+      .length;
   }
 
   /**
@@ -688,16 +753,23 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
       onWhat: AnyObject<SchemaObjectTypes<S>>;
       ofType?: SchemaSubjectTypes<S>;
       context?: Record<string, unknown>;
+      limit?: number;
+      offset?: number;
     },
     reader: Reader<SchemaSubjectTypes<S>, SchemaObjectTypes<S>>,
   ): Promise<Subject<SchemaSubjectTypes<S>>[]> {
     // Reverse expansion handles both modes (it throws on depth-cap truncation in
     // `throw` mode). Field-level schemas use the verify path, which handles
     // base/field expansion.
+    let result: Subject<SchemaSubjectTypes<S>>[];
     if (this.fieldFree) {
-      return this.reverseExpandSubjects(args, reader);
+      result = await this.reverseExpandSubjects(args, reader);
+    } else {
+      result = await this.listSubjectsViaForwardConfirm(args, reader);
     }
-    return this.listSubjectsViaForwardConfirm(args, reader);
+    const offset = args.offset ?? 0;
+    const limit = args.limit ?? Number.POSITIVE_INFINITY;
+    return result.slice(offset, offset + limit);
   }
 
   /**
@@ -968,17 +1040,15 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     args: ListAccessibleObjectsArgs<S> & {
       limit?: number;
       offset?: number;
-      /**
-       * Fetch the whole tuple set up front so the traversal resolves in memory —
-       * the recommended mode for this operation over a large store. Equivalent
-       * to running inside `withReadScope({ preload: true })`.
-       */
-      preload?: boolean;
-    },
+    } & ReadOptions<S>,
   ): Promise<ListAccessibleObjectsResult<S>> {
     return this.withReader(
       (reader) => this.listAccessibleObjectsWith(args, reader),
-      { preload: args.preload },
+      {
+        contextual: this.toContextual(args.contextualTuples),
+        consistency: args.consistency,
+        preload: args.preload,
+      },
     );
   }
 
@@ -2046,14 +2116,34 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
     const k = objKey(group);
     if (seen.has(k)) return;
     seen.add(k);
-    for (const groupRelation of this.groupRels) {
-      const members = await reader.findSubjects(
-        group as AnyObject<SchemaObjectTypes<S>>,
-        groupRelation,
-      );
-      for (const member of members) {
-        add(member);
-        await this.collectGroupMembers(member, add, seen, depth + 1, reader);
+    if (group.id === PUBLIC_ID) {
+      // A wildcard `{type, "*"}` matches every concrete group of that type, so
+      // members of ALL groups of this type inherit. Over-inclusion is harmless
+      // because every candidate is confirmed with a forward check afterwards.
+      for (const groupRelation of this.groupRels) {
+        const all = await reader.findTuples({ relation: groupRelation });
+        for (const t of all) {
+          if (t.object.type !== group.type) continue;
+          add(t.subject);
+          await this.collectGroupMembers(
+            t.subject,
+            add,
+            seen,
+            depth + 1,
+            reader,
+          );
+        }
+      }
+    } else {
+      for (const groupRelation of this.groupRels) {
+        const members = await reader.findSubjects(
+          group as AnyObject<SchemaObjectTypes<S>>,
+          groupRelation,
+        );
+        for (const member of members) {
+          add(member);
+          await this.collectGroupMembers(member, add, seen, depth + 1, reader);
+        }
       }
     }
   }

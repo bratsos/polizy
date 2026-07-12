@@ -100,6 +100,10 @@ export class MyCustomStorageAdapter implements StorageAdapter {
 }
 ```
 
+:::note
+The `StorageAdapter` interface carries an optional `@internal` phantom `_types` marker as a compile-time variance device. Custom adapters do not need to implement or define this property.
+:::
+
 ---
 
 ## Core Contracts & Rules
@@ -133,7 +137,10 @@ If your database supports repeatable reads or snapshot isolation (like PostgreSQ
 - It must execute the callback `fn`, passing it a `reader` object which implements `findTuples`, `findSubjects`, and `findObjects` resolved against that snapshot.
 - If you do not implement this, polizy will automatically fall back to live reads when users ask for `consistency: "strong"`.
 
-### 4. Index both hot read paths (required for performance)
+### 4. Find Tuples Condition Filtering
+When filtering tuples via `findTuples()`, if the `condition` key is explicitly present in the query object but its value is `undefined` (e.g., `{ subject: ..., condition: undefined }`), the adapter must apply **no** condition constraint. This means it must return matching tuples both with and without conditions, rather than filtering to only tuples where the condition is null.
+
+### 5. Index both hot read paths (required for performance)
 
 polizy reads tuples two ways, and **both must be indexed** or list operations
 degrade to full table scans at scale:
@@ -160,33 +167,34 @@ before any other optimization. See [Performance](../performance/overview.md).
 
 ## Testing Your Adapter
 
-polizy uses a shared cross-adapter test suite to validate that both `InMemoryStorageAdapter` and `PrismaStorageAdapter` conform to the exact contracts. You can run your custom adapter against the same test suite.
+polizy publishes its shared cross-adapter test suite so that custom adapters can be validated against the exact same contracts.
 
-The test suite is located in the source code at:
-`packages/polizy/src/polizy.storage.shared-tests.ts`
+The test suite is exported via the `polizy/storage-tests` subpath. It registers standard `node:test` cases directly.
 
-While it is not a published npm export, you can reference it directly during local development if you are working within a monorepo, or copy its assertions into your own codebase.
+The test suite exports:
+- `defineStorageAdapterTestSuite`: The test suite registration function.
+- Types: `TestSubject`, `TestObject`, and `StorageAdapterTestContext`.
 
-To run it, configure a test file using `node:test`:
+The context shape is:
+```ts
+export interface StorageAdapterTestContext {
+  getAdapter: () => Promise<StorageAdapter>;
+  cleanup?: () => Promise<void>;
+}
+```
+
+To run the suite, create a test file using `node:test`:
 
 ```ts
-import { describe } from "node:test";
 import { MyCustomStorageAdapter } from "./my-adapter";
-import { 
-  defineStorageAdapterTestSuite, 
-  type StorageAdapterTestContext 
-} from "polizy/src/polizy.storage.shared-tests.ts"; // path to source file
+import { defineStorageAdapterTestSuite } from "polizy/storage-tests";
 
-describe("MyCustomStorageAdapter Shared Tests", () => {
-  const context: StorageAdapterTestContext = {
-    getAdapter: async () => {
-      return new MyCustomStorageAdapter();
-    },
-    cleanup: async () => {
-      // Clean up database tables between test runs
-    }
-  };
-
-  defineStorageAdapterTestSuite("MyCustomStorageAdapter", context);
+defineStorageAdapterTestSuite("MyCustomStorageAdapter", {
+  getAdapter: async () => {
+    return new MyCustomStorageAdapter();
+  },
+  cleanup: async () => {
+    // Clean up database tables or clear collections between test runs
+  }
 });
 ```

@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Installation
 
-Getting started with **polizy** is straightforward. Because it is built from the ground up for modern Node.js and TypeScript, it has zero external runtime dependencies and requires no complex compilation steps.
+Getting started with **polizy** is straightforward. Because it is built from the ground up for modern Node.js and TypeScript, it has only two small runtime dependencies (`fast-equals` and `tslib`), while `@prisma/client` is an optional peer dependency needed only if you use the Prisma adapter.
 
 Let's add it to your project!
 

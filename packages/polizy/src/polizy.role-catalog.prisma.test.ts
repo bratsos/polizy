@@ -63,7 +63,7 @@ describe("PrismaRoleCatalog", () => {
   });
 
   it("upsert/get/list/remove round-trip", async () => {
-    const catalog = PrismaRoleCatalog(prisma);
+    const catalog = PrismaRoleCatalog(prisma as any);
     await catalog.upsert({
       tenant: "workspace:acme",
       key: "ops",
@@ -96,12 +96,12 @@ describe("PrismaRoleCatalog", () => {
 
   it("backs a RoleRegistry over the Prisma adapter end-to-end", async () => {
     const authz = new AuthSystem({
-      storage: PrismaAdapter(prisma),
+      storage: PrismaAdapter(prisma as any) as any,
       schema,
       defaultGroupRelation: "member",
     });
     const roles = new RoleRegistry(authz, schema, {
-      catalog: PrismaRoleCatalog(prisma),
+      catalog: PrismaRoleCatalog(prisma as any),
     });
 
     await authz.setParent({

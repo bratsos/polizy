@@ -37,7 +37,7 @@ type TupleDelegate = { findMany(args: any): Promise<any[]> };
 /** Prisma's interactive (callback) transaction form, used for snapshot reads. */
 type InteractiveTransaction = <R>(
   fn: (tx: { polizyTuple: TupleDelegate }) => Promise<R>,
-  options?: { isolationLevel?: string },
+  options?: { isolationLevel?: string; maxWait?: number; timeout?: number },
 ) => Promise<R>;
 
 /**
@@ -91,8 +91,6 @@ async function queryTuples<S extends SubjectType, O extends ObjectType>(
   }
   if (filter.condition !== undefined) {
     whereClause.condition = filter.condition;
-  } else if (Object.hasOwn(filter, "condition")) {
-    whereClause.condition = null;
   }
 
   const results = await tuple.findMany({
@@ -161,6 +159,15 @@ export function PrismaAdapter<
      * transaction is already a snapshot), so leave it unset there.
      */
     snapshotIsolationLevel?: string;
+    /**
+     * Options for the underlying Prisma interactive transaction.
+     * Prisma defaults are maxWait 2s, timeout 5s. Raise them for
+     * strong-consistency list operations over large stores.
+     */
+    transactionOptions?: {
+      maxWait?: number;
+      timeout?: number;
+    };
   },
 ): StorageAdapter<S, O> {
   const p = prisma;
@@ -265,6 +272,17 @@ export function PrismaAdapter<
     withSnapshot<T>(fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>) {
       // Call through `p.$transaction` (not a detached local) so Prisma keeps
       // its `this` binding; the cast only selects the interactive overload.
+      let txOpts:
+        | { isolationLevel?: string; maxWait?: number; timeout?: number }
+        | undefined = undefined;
+      if (snapshotIsolationLevel || options?.transactionOptions) {
+        txOpts = {
+          ...(snapshotIsolationLevel
+            ? { isolationLevel: snapshotIsolationLevel }
+            : {}),
+          ...options?.transactionOptions,
+        };
+      }
       return (p.$transaction as unknown as InteractiveTransaction)(
         (tx) =>
           fn({
@@ -275,9 +293,7 @@ export function PrismaAdapter<
             findObjects: (subject, relation, opts) =>
               queryObjects<S, O>(tx.polizyTuple, subject, relation, opts),
           }),
-        snapshotIsolationLevel
-          ? { isolationLevel: snapshotIsolationLevel }
-          : undefined,
+        txOpts,
       );
     },
   };

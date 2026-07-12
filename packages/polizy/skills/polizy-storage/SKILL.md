@@ -4,7 +4,7 @@ description: Storage adapter setup for polizy authorization. Use when configurin
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -72,6 +72,7 @@ const authz = new AuthSystem({ storage, schema });
 - Lost on process restart
 - No network latency
 - Fastest possible reads
+- Returns live references — treat results as immutable; use `withSnapshot` for an isolated copy.
 
 ### Testing Example
 
@@ -138,9 +139,8 @@ describe("authorization", () => {
 
 ## Storage Interface
 
-All adapters implement the same contract. The bundled `InMemoryStorageAdapter`
-and `PrismaAdapter` are both held to it by a shared cross-adapter test suite, so
-they behave identically:
+All adapters implement the same contract. You can validate any custom adapter using the published contract test suite `polizy/storage-tests`.
+The bundled `InMemoryStorageAdapter` and `PrismaAdapter` are both held to this contract, so they behave identically:
 
 ```typescript
 interface StorageAdapter<S, O> {
@@ -181,6 +181,8 @@ assignments (`assignee` membership tuples) live as ordinary tuples in the
 `StorageAdapter`, so a role is fully functional even with no catalog at all. The
 catalog exists so permission-less roles stay listable (e.g. a freshly-created
 role with no caps yet still shows up in `listRoles`/`permissionMatrix`).
+
+Note that `InMemoryRoleCatalog` composite key separator is written as the unicode escape sequence `\u0000` in source (never as an actual control character).
 
 ```typescript
 // Dev / tests: in-memory catalog
@@ -277,8 +279,8 @@ subject's reachable set rather than scanning the whole tuple table. See
 
 ## References
 
-- [PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md) - Full Prisma setup
-- [CUSTOM-ADAPTERS.md](references/CUSTOM-ADAPTERS.md) - Building custom adapters
+- [PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md) - Full Prisma setup (with `transactionOptions` config)
+- [CUSTOM-ADAPTERS.md](references/CUSTOM-ADAPTERS.md) - Building custom adapters & testing with `polizy/storage-tests`
 - [PERFORMANCE.md](references/PERFORMANCE.md) - Optimization strategies
 
 ## Related Skills

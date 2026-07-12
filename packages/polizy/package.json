@@ -29,13 +29,23 @@
         "types": "./dist/prisma-storage.d.ts",
         "default": "./dist/prisma-storage.cjs"
       }
+    },
+    "./storage-tests": {
+      "import": {
+        "types": "./dist/storage-tests.d.ts",
+        "default": "./dist/storage-tests.mjs"
+      },
+      "require": {
+        "types": "./dist/storage-tests.d.ts",
+        "default": "./dist/storage-tests.cjs"
+      }
     }
   },
   "scripts": {
     "clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist/types",
     "build:bundle": "rollup -c",
-    "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle",
+    "build": "pnpm run clean && pnpm run build:types && pnpm run build:bundle && rm -rf dist/types",
     "dev": "rollup -c -w",
     "bench": "node --expose-gc --experimental-strip-types --no-warnings bench/bench.ts",
     "pretest": "prisma generate",

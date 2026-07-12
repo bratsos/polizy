@@ -170,7 +170,7 @@ async function assertListParity(
           onWhat: obj as never,
         });
         const actual =
-          listedKeys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type);
+          listedKeys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type as any);
         assert.equal(
           actual,
           expected,
@@ -749,67 +749,63 @@ describe("randomized differential: deny-mode list ops == forward check()", () =>
       const grants = 4 + Math.floor(rand() * 10);
       for (let i = 0; i < grants; i++) {
         const roll = rand();
-        try {
-          if (roll < 0.35) {
-            // direct grant (sometimes wildcard, sometimes time-conditioned)
-            const who =
-              rand() < 0.15 ? everyone(pick(["user", "team"])) : pick(subjects);
-            const cond =
-              rand() < 0.15
-                ? { validUntil: new Date(Date.now() + 3_600_000) }
-                : undefined;
-            await authz.allow({
-              who: who as never,
-              toBe: pick(directRels),
-              onWhat: pick(objects) as never,
-              when: cond,
-            });
-          } else if (roll < 0.6) {
-            // group membership (member or orgMember), sometimes wildcard/nested
-            const rel = pick(["member", "orgMember"] as const);
-            const member =
-              rand() < 0.12
-                ? everyone("user")
-                : pick([
-                    ...users.map((id) => ({ type: "user", id })),
-                    ...teams.map((id) => ({ type: "team", id })),
-                  ]);
-            const group =
-              rel === "orgMember"
-                ? pick(orgs.map((id) => ({ type: "org", id })))
-                : pick(teams.map((id) => ({ type: "team", id })));
-            await authz.addMember({
-              member: member as never,
-              group: group as never,
-              as: rel,
-            });
-          } else if (roll < 0.85) {
-            // hierarchy link (parent or orgParent)
-            const rel = pick(["parent", "orgParent"] as const);
-            const child = pick([
-              ...docs.map((id) => ({ type: "doc", id })),
-              ...folders.map((id) => ({ type: "folder", id })),
-            ]);
-            const parent =
-              rel === "orgParent"
-                ? pick(orgs.map((id) => ({ type: "org", id })))
-                : pick(folders.map((id) => ({ type: "folder", id })));
-            await authz.setParent({
-              child: child as never,
-              parent: parent as never,
-              as: rel,
-            });
-          } else {
-            // field-level grant on a doc (doc is not field-enabled here, so this
-            // just exercises ids containing '#' staying literal — safe)
-            await authz.allow({
-              who: pick(subjects) as never,
-              toBe: pick(directRels),
-              onWhat: pick(objects) as never,
-            });
-          }
-        } catch {
-          // ignore invalid random combinations
+        if (roll < 0.35) {
+          // direct grant (sometimes wildcard, sometimes time-conditioned)
+          const who =
+            rand() < 0.15 ? everyone(pick(["user", "team"])) : pick(subjects);
+          const cond =
+            rand() < 0.15
+              ? { validUntil: new Date(Date.now() + 3_600_000) }
+              : undefined;
+          await authz.allow({
+            who: who as never,
+            toBe: pick(directRels),
+            onWhat: pick(objects) as never,
+            when: cond,
+          });
+        } else if (roll < 0.6) {
+          // group membership (member or orgMember), sometimes wildcard/nested
+          const rel = pick(["member", "orgMember"] as const);
+          const member =
+            rand() < 0.12
+              ? everyone("user")
+              : pick([
+                  ...users.map((id) => ({ type: "user", id })),
+                  ...teams.map((id) => ({ type: "team", id })),
+                ]);
+          const group =
+            rel === "orgMember"
+              ? pick(orgs.map((id) => ({ type: "org", id })))
+              : pick(teams.map((id) => ({ type: "team", id })));
+          await authz.addMember({
+            member: member as never,
+            group: group as never,
+            as: rel,
+          });
+        } else if (roll < 0.85) {
+          // hierarchy link (parent or orgParent)
+          const rel = pick(["parent", "orgParent"] as const);
+          const child = pick([
+            ...docs.map((id) => ({ type: "doc", id })),
+            ...folders.map((id) => ({ type: "folder", id })),
+          ]);
+          const parent =
+            rel === "orgParent"
+              ? pick(orgs.map((id) => ({ type: "org", id })))
+              : pick(folders.map((id) => ({ type: "folder", id })));
+          await authz.setParent({
+            child: child as never,
+            parent: parent as never,
+            as: rel,
+          });
+        } else {
+          // field-level grant on a doc (doc is not field-enabled here, so this
+          // just exercises ids containing '#' staying literal — safe)
+          await authz.allow({
+            who: pick(subjects) as never,
+            toBe: pick(directRels),
+            onWhat: pick(objects) as never,
+          });
         }
       }
 
@@ -831,7 +827,7 @@ describe("randomized differential: deny-mode list ops == forward check()", () =>
               onWhat: obj as never,
             });
             const actual =
-              keys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type);
+              keys.has(`${s.type}:${s.id}`) || wildTypes.has(s.type as any);
             assert.equal(
               actual,
               expected,

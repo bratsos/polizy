@@ -54,7 +54,7 @@ const U = (id: string) => ({ type: "user" as const, id });
 const D = (id: string) => ({ type: "document" as const, id });
 const F = (id: string) => ({ type: "folder" as const, id });
 const T = (id: string) => ({ type: "team" as const, id });
-const ACTIONS = ["view", "edit", "delete", "share", "manage"];
+const ACTIONS = ["view", "edit", "delete", "share", "manage"] as const;
 const OBJECTS = [
   F("eng"),
   D("arch"),

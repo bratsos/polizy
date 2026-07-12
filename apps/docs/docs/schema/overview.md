@@ -41,10 +41,10 @@ const schema = defineSchema({
   },
 
   // How permissions flow from a parent to its children.
+  // Only actions that propagate need to be listed (partial map).
   hierarchyPropagation: {
     view: ["view"], // if you can view the parent, you can view the child
     edit: ["edit"],
-    delete: [],
   },
 
   // Opt in to field-level identifiers (see "Field-level permissions").
@@ -118,11 +118,12 @@ If you have nested resources (such as documents in a folder), permissions can fl
 hierarchyPropagation: {
   view: ["view"], // if you can view the parent folder, you can view the child document
   edit: ["edit"],
-  delete: [],     // delete permission does not flow down
 }
 ```
 
-This specifies that a user who can `view` the parent folder is also allowed to `view` the child document. However, being able to `delete` a parent folder does not automatically grant deletion rights on the child document.
+This specifies that a user who can `view` the parent folder is also allowed to `view` the child document. 
+
+Note that `hierarchyPropagation` can be a **partial** map: only actions that actually propagate need to be defined. Actions that are omitted (such as `delete`) do not flow down the hierarchy, and you do not need to provide empty padding arrays (e.g. `delete: []`). However, any typo'd keys or action names in the propagation rules will still generate compile-time type errors.
 
 ### 5. Field-Level Permissions
 

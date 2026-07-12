@@ -4,7 +4,7 @@ import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { AuthSystem } from "../polizy.ts";
 import { defineSchema } from "../types.ts";
 
-let storage: InMemoryStorageAdapter<any, any>;
+let storage: InMemoryStorageAdapter;
 
 describe("Authorization Service example scenarios", () => {
   describe("Examples", () => {
@@ -42,28 +42,24 @@ describe("Authorization Service example scenarios", () => {
           onWhat: { type: "folder", id: "folderA" },
         });
 
-        await authz.allow({
-          who: { type: "file", id: "file1" },
-          toBe: "childOf",
-          onWhat: { type: "folder", id: "folderA" },
+        await authz.setParent({
+          child: { type: "file", id: "file1" },
+          parent: { type: "folder", id: "folderA" },
         });
 
-        await authz.allow({
-          who: { type: "file", id: "file2" },
-          toBe: "childOf",
-          onWhat: { type: "folder", id: "folderA" },
+        await authz.setParent({
+          child: { type: "file", id: "file2" },
+          parent: { type: "folder", id: "folderA" },
         });
 
-        await authz.allow({
-          who: { type: "folder", id: "subfolder1" },
-          toBe: "childOf",
-          onWhat: { type: "folder", id: "folderA" },
+        await authz.setParent({
+          child: { type: "folder", id: "subfolder1" },
+          parent: { type: "folder", id: "folderA" },
         });
 
-        await authz.allow({
-          who: { type: "file", id: "file3" },
-          toBe: "childOf",
-          onWhat: { type: "folder", id: "subfolder1" },
+        await authz.setParent({
+          child: { type: "file", id: "file3" },
+          parent: { type: "folder", id: "subfolder1" },
         });
 
         await authz.allow({
@@ -72,10 +68,9 @@ describe("Authorization Service example scenarios", () => {
           onWhat: { type: "folder", id: "folderB" },
         });
 
-        await authz.allow({
-          who: { type: "file", id: "file4" },
-          toBe: "childOf",
-          onWhat: { type: "folder", id: "folderB" },
+        await authz.setParent({
+          child: { type: "file", id: "file4" },
+          parent: { type: "folder", id: "folderB" },
         });
       });
 

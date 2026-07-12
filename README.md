@@ -73,10 +73,10 @@ const schema = defineSchema({
   },
 
   // How permissions flow from a parent to its children.
+  // Only actions that propagate need listing (no empty padding arrays required).
   hierarchyPropagation: {
     view: ["view"], // if you can view the parent, you can view the child
     edit: ["edit"],
-    delete: [],
   },
 
   // Opt in to field-level identifiers (see "Field-level permissions").
@@ -229,8 +229,8 @@ const { accessible } = await authz.listAccessibleObjects({ who: { type: "user", 
 // [{ object: { type:"document", id:"doc1" }, actions: ["view","edit",...], parent? }, ...]
 //  optional filters: canThey, limit, offset
 
-// Who can perform an action on this object? (reverse expansion)
-const subjects = await authz.listSubjects({ canThey: "view", onWhat: { type: "document", id: "doc1" } });
+// Who can perform an action on this object? (reverse expansion; supports limit/offset pagination)
+const subjects = await authz.listSubjects({ canThey: "view", onWhat: { type: "document", id: "doc1" }, limit: 50, offset: 0 });
 
 // Existence (short-circuits) and counts — same args as listSubjects/listAccessibleObjects.
 // A wildcard grant (everyone(type)) counts as one entry, not a per-user expansion.
@@ -272,7 +272,7 @@ await authz.check({ who, canThey: "edit", onWhat, consistency: "strong" });
 await authz.checkMany(requests, { consistency: "strong" });
 ```
 
-`"strong"` is served by the adapter's optional `withSnapshot`: the in-memory adapter copies the tuple set; the Prisma adapter runs the whole operation in one transaction — pass `PrismaAdapter(prisma, { snapshotIsolationLevel: "RepeatableRead" })` for Postgres MVCC (readers never block writers, writers never block readers). Adapters that don't implement it fall back to live reads.
+`"strong"` is served by the adapter's optional `withSnapshot`: the in-memory adapter copies the tuple set; the Prisma adapter runs the whole operation in one transaction — pass `PrismaAdapter(prisma, { snapshotIsolationLevel: "RepeatableRead", transactionOptions: { maxWait: 5000, timeout: 10000 } })` for Postgres MVCC (readers never block writers, writers never block readers; you can customize transactionOptions timeouts for strong-consistency operations over large stores). Adapters that don't implement it fall back to live reads.
 
 **Read-your-writes without a round-trip:** pass freshly written (or not-yet-committed) facts as `contextualTuples`. They're evaluated as if stored, and never persisted:
 
@@ -282,6 +282,8 @@ await authz.check({
   contextualTuples: [{ subject: who, relation: "viewer", object: doc }],
 }); // true, even before the grant is committed
 ```
+
+Because contextual tuples represent raw relationship tuples, dynamic conditions must be defined under the `condition:` key (unlike the `when:` property taken by grant verbs). Contextual tuples (and `consistency`/`preload`) are accepted uniformly across `check`/`checkMany`/`checkOrThrow`/`explain` and the list/count/existence queries, and `withReadScope` accepts scope-wide `contextualTuples`.
 
 ## Field-level permissions
 
@@ -368,7 +370,7 @@ A runnable demo (permissions matrix UI + headless walkthrough) lives in
 
 ## Custom storage adapters
 
-Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package ships a shared contract test suite you can run against your adapter. Optionally implement `withSnapshot` to enable `consistency: "strong"` (see [Consistency & read-after-write](#consistency--read-after-write)); without it, strong checks transparently fall back to live reads.
+Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `findSubjects`, `findObjects`). `write` must be idempotent on `(subject, relation, object)`, and `delete` must match `who AND (object == onWhat OR subject == onWhat)`. The package publishes its shared contract test suite at `polizy/storage-tests` — `import { defineStorageAdapterTestSuite } from "polizy/storage-tests"` and run it against your adapter (it registers node:test cases; see src for the expected context shape). Optionally implement `withSnapshot` to enable `consistency: "strong"` (see [Consistency & read-after-write](#consistency--read-after-write)); without it, strong checks transparently fall back to live reads.
 
 ## Limitations
 

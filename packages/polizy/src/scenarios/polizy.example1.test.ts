@@ -4,7 +4,7 @@ import { InMemoryStorageAdapter } from "../polizy.in-memory.storage.ts";
 import { AuthSystem } from "../polizy.ts";
 import { defineSchema } from "../types.ts";
 
-let storage: InMemoryStorageAdapter<any, any>;
+let storage: InMemoryStorageAdapter;
 
 describe("Authorization Service example scenarios", () => {
   describe("Examples", () => {
@@ -53,110 +53,65 @@ describe("Authorization Service example scenarios", () => {
           onWhat: { type: "review", id: "cert1#strengths" },
         });
 
-        await assert.doesNotReject(
-          authz.check({
-            who: { type: "user", id: "manager1" },
-            canThey: "manage",
-            onWhat: { type: "review", id: "cert1" },
-          }),
-          "Manager should be able to manage",
-        );
-        assert.ok(
-          await authz.check({
-            who: { type: "user", id: "manager1" },
-            canThey: "manage",
-            onWhat: { type: "review", id: "cert1" },
-          }),
-        );
+        const managerCanManage = await authz.check({
+          who: { type: "user", id: "manager1" },
+          canThey: "manage",
+          onWhat: { type: "review", id: "cert1" },
+        });
+        assert.ok(managerCanManage, "Manager should be able to manage");
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+        const employeeCanViewStrengthsInit = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "view",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
+        assert.ok(
+          employeeCanViewStrengthsInit,
           "Employee should be able to view basic info",
         );
-        assert.ok(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-        );
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "edit",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+        const employeeCanEditStrengthsInit = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "edit",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
+        assert.strictEqual(
+          employeeCanEditStrengthsInit,
+          false,
           "Employee should not be able to edit basic info initially",
         );
-        assert.strictEqual(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "edit",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-          false,
-        );
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+        const employeeCanViewStrengthsInit2 = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "view",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
+        assert.ok(
+          employeeCanViewStrengthsInit2,
           "Employee should be able to view strengths initially",
         );
-        assert.ok(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-        );
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1" },
-          }),
-          "Employee should not be able to view whole cert initially",
-        );
+        const employeeCanViewCertInit = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "view",
+          onWhat: { type: "review", id: "cert1" },
+        });
         assert.strictEqual(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1" },
-          }),
+          employeeCanViewCertInit,
           false,
+          "Employee should not be able to view whole cert initially",
         );
       });
 
@@ -175,27 +130,18 @@ describe("Authorization Service example scenarios", () => {
           onWhat: { type: "review", id: "cert1#strengths" },
         });
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "edit",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-          "Employee should not be able to edit basic info",
-        );
+        const employeeCanEditStrengthsPrev = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "edit",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
         assert.strictEqual(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "edit",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+          employeeCanEditStrengthsPrev,
           false,
+          "Employee should not be able to edit basic info",
         );
       });
 
@@ -213,25 +159,16 @@ describe("Authorization Service example scenarios", () => {
           toBe: "viewer",
           onWhat: { type: "review", id: "cert1#strengths" },
         });
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-        );
+        const employeeCanViewStrengthsBeforeGrant = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "view",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
         assert.ok(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+          employeeCanViewStrengthsBeforeGrant,
           "Employee should view strengths initially",
         );
 
@@ -241,47 +178,29 @@ describe("Authorization Service example scenarios", () => {
           onWhat: { type: "review", id: "cert1#strengths" },
         });
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+        const employeeCanViewStrengthsAfterGrant = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "view",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
+        assert.ok(
+          employeeCanViewStrengthsAfterGrant,
           "Employee should now view strengths",
         );
+        const employeeCanEditStrengthsAfterGrant = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "edit",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
         assert.ok(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-        );
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "edit",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+          employeeCanEditStrengthsAfterGrant,
           "Employee should now be able to edit strengths",
-        );
-        assert.ok(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "edit",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
         );
       });
 
@@ -300,17 +219,6 @@ describe("Authorization Service example scenarios", () => {
           onWhat: { type: "review", id: "cert1#strengths" },
         });
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "stranger",
-            },
-            canThey: "manage_permissions",
-            onWhat: { type: "review", id: "cert1" },
-          }),
-          "Unauthorized user check should not throw",
-        );
         const canUnauthorizedGrant = await authz.check({
           who: {
             type: "user",
@@ -325,47 +233,29 @@ describe("Authorization Service example scenarios", () => {
           "Unauthorized user cannot grant permissions",
         );
 
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "manage",
-            onWhat: { type: "review", id: "cert1" },
-          }),
-        );
+        const employeeCanManageCert = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "manage",
+          onWhat: { type: "review", id: "cert1" },
+        });
         assert.strictEqual(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "manage",
-            onWhat: { type: "review", id: "cert1" },
-          }),
+          employeeCanManageCert,
           false,
           "Employee cannot manage cert",
         );
-        await assert.doesNotReject(
-          authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
-        );
+        const employeeCanViewStrengthsFinal = await authz.check({
+          who: {
+            type: "user",
+            id: "employee1",
+          },
+          canThey: "view",
+          onWhat: { type: "review", id: "cert1#strengths" },
+        });
         assert.ok(
-          await authz.check({
-            who: {
-              type: "user",
-              id: "employee1",
-            },
-            canThey: "view",
-            onWhat: { type: "review", id: "cert1#strengths" },
-          }),
+          employeeCanViewStrengthsFinal,
           "Employee can still view basic info",
         );
       });

@@ -4,7 +4,7 @@ description: Debug and fix polizy authorization issues. Use when permission chec
 license: MIT
 metadata:
   author: bratsos
-  version: "0.5.0"
+  version: "0.6.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -310,7 +310,7 @@ relation per grantable action.
 |---------|-------|-----|
 | `addMember`/`assignRole` throws `SchemaError: Schema declares multiple 'group' relations` after `withRoleScaffold` | The scaffold added the reserved `assignee` group relation, so a schema that previously had exactly one group relation now has two and group inference is ambiguous | Set `defaultGroupRelation: "member"` (your real group) in the `AuthSystem` config; the scaffold's `assignee` is auto-excluded from inference, and `RoleRegistry` always passes `as: "assignee"` itself |
 | A custom role grants nothing | A per-resource action needs `hierarchyPropagation` **and** the resource parented to the tenant for the workspace-scoped `cap_<action>` to flow down; otherwise the cap sits only on the tenant/workspace object | Add `hierarchyPropagation` for the action and `setParent` the resource under the tenant, **or** `check()` the tenant/workspace object directly. Also confirm the role NAME has no typo — an unknown role resolves to a role with no caps and fails closed |
-| `listSubjects`/`listAccessibleObjects` slow on large datasets | They gather a candidate set then confirm **each** candidate with a full `check`, so cost is ~O(candidates x check) and scales with the reachable set, not the tuple count | Narrow with `ofType`/`canThey`, paginate, or cache. Reserve for admin/list views — don't put them on the hot path |
+| `listSubjects`/`listAccessibleObjects` slow on large datasets | Only schemas with `fieldLevelObjects` fall back to the gather-then-confirm path. For schemas without `fieldLevelObjects`, `listSubjects` uses reverse expansion and `listAccessibleObjects` uses single-pass forward derivation—making them output-linear with no per-candidate check in both `maxDepthBehavior` modes (though throw mode raises `MaxDepthExceededError` if the relevant subgraph exceeds the depth cap). Slow queries can also happen if the storage adapter indexes are missing. | Verify your store indexes the query paths (e.g., `PolizyTuple` indexes). If using `fieldLevelObjects`, narrow with `ofType`/`canThey`, paginate, or cache. Use `preload: true` for remote stores to fetch once and resolve in memory. |
 
 > `explain()` works through roles too: a granting path surfaces the
 > `assignee` group hop into the role, then the `cap_<action>` edge (direct or via
@@ -442,6 +442,9 @@ console.dir(await authz.explain({ who: alice, canThey: "edit", onWhat: doc }),
   { depth: null });
 ```
 
+> [!NOTE]
+> `explain()` never throws `MaxDepthExceededError`. Past the depth cap, it returns `{ allowed: false, via: null }` even in `"throw"` mode.
+
 See [CHECK-ALGORITHM.md](references/CHECK-ALGORITHM.md) for how to read the
 `via` node kinds (`direct`, `wildcard`, `group`, `hierarchy`, `field`).
 
@@ -457,11 +460,16 @@ All errors extend `PolizyError`; import the specific classes from `"polizy"`.
 | `SchemaError: Schema declares multiple 'group'/'hierarchy' relations (...); specify which via 'as'.` | >1 group/hierarchy relation, `as` omitted | Pass `as: "<relation>"` |
 | `SchemaError` from `defineSchema` | Action maps to an undefined relation, or `hierarchyPropagation` references an undefined action | Fix the dangling reference |
 | `SchemaError: Invalid field id '...'` | Empty base or field around the separator on a field-enabled type | Use `base#field` with both non-empty |
+| `SchemaError: Tenant id cannot contain "/"` | Tenant id contains a slash during role mapping (`roleRef` or `defineRole`) | Ensure tenant ids avoid `/` |
 | `MaxDepthExceededError` | Group/hierarchy chain exceeds `defaultCheckDepth` | Raise depth, fix data, or `maxDepthBehavior: "deny"` |
 | `NotAuthorizedError` | `checkOrThrow` denied | Expected — catch it and return 403 |
 | `ConfigurationError: Storage adapter is required.` | Missing `storage` | Provide storage in constructor |
 | `ConfigurationError: Authorization schema is required.` | Missing `schema` | Provide schema in constructor |
 | `StorageError` | Adapter operation failed (e.g. Prisma DB error) | Inspect `.cause`; check DB/migration |
+
+### Condition Shape Hardening (0.6.0)
+
+If you have malformed condition shapes stored in your database, they will **fail closed (deny access)** instead of throwing a runtime `TypeError` during the check evaluation. Ensure your conditions follow the strict typing of `Condition` objects.
 
 ## Anti-Patterns to Avoid
 

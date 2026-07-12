@@ -26,11 +26,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+        working-directory: packages/polizy
+
       - name: Lint
         run: pnpm biome check .
 
       - name: Type check
         run: pnpm tsc --noEmit
+        working-directory: packages/polizy
+
+      - name: Type check (tests + bench)
+        run: pnpm tsc --noEmit -p tsconfig.tests.json
         working-directory: packages/polizy
 
       - name: Test

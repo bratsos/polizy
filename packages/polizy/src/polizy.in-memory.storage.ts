@@ -218,11 +218,24 @@ function snapshotReader<S extends SubjectType, O extends ObjectType>(
   };
 }
 
+/**
+ * An in-memory implementation of {@link StorageAdapter}.
+ *
+ * Results returned by methods like {@link findTuples} are live references to the stored
+ * objects themselves, rather than deep copies, to maximize performance. Modifying these
+ * objects directly will corrupt the store and its internal indexes silently. You should
+ * treat all returned tuples as immutable, or use {@link withSnapshot} to obtain an
+ * isolated, consistent point-in-time copy.
+ */
 export class InMemoryStorageAdapter<
   S extends SubjectType = SubjectType,
   O extends ObjectType = ObjectType,
 > implements StorageAdapter<S, O>
 {
+  declare readonly _types?: {
+    subject: (s: S) => S;
+    object: (o: O) => O;
+  };
   private store = new TupleStore<S, O>();
 
   async write(tuples: InputTuple<S, O>[]) {
@@ -254,10 +267,8 @@ export class InMemoryStorageAdapter<
     was?: Relation;
     onWhat?: AnyObject<O>;
   }) {
+    // Guard against empty filters to prevent deleting all tuples in the store.
     if (!filter.who && !filter.was && !filter.onWhat) {
-      console.warn(
-        "InMemoryStorageAdapter.delete called with an empty filter. No tuples deleted.",
-      );
       return 0;
     }
 

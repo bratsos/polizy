@@ -14,8 +14,8 @@ This skill activates when a user says things like:
 
 The router's job is to figure out **which migration guides to apply, in order**,
 given the version delta — and to apply them **step by step** even across several
-releases (e.g. `0.2.0 → 0.5.0` applies `0.2→0.3`, then `0.3→0.4`, then
-`0.4→0.5`). The user should already have run their package manager's upgrade
+releases (e.g. `0.2.0 → 0.6.0` applies `0.2→0.3`, then `0.3→0.4`, then
+`0.4→0.5`, then `0.5→0.6`). The user should already have run their package manager's upgrade
 command before invoking this; if not, run it for them (see "Package manager
 reference" below).
 
@@ -65,7 +65,7 @@ ls turbo.json nx.json 2>/dev/null
 
 If it's a monorepo, run `grep -rl '"polizy"' --include=package.json` from the
 root to find every workspace that depends on `polizy`. **Code** migrations apply
-to each; the **Prisma schema** migration (the `@@unique` in 0.1→0.2) runs once,
+to each; the **Prisma schema** migration (the `@@unique` in 0.2→0.3) runs once,
 in whichever workspace owns the database.
 
 ## Step 1 — Detect the currently installed version
