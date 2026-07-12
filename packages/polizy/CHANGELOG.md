@@ -1,5 +1,40 @@
 # polizy
 
+## 0.6.0
+
+### Minor Changes
+
+- facb988: - Bare `new InMemoryStorageAdapter()` / `PrismaAdapter(client)` now compose with literal-typed schemas under strict TypeScript (previously required explicit or any generics due to a variance artifact; `AuthSystem` now also accepts the wide string-typed adapter instantiation, which is semantically safe).
+  - JSDoc clarifications: contextual tuples carry constraints in the stored `condition:` field (grant verbs use `when:`), and `explain` never throws on depth.
+- facb988: - Added transactionOptions passthrough for withSnapshot (Prisma interactive-tx defaults abort long strong-consistency list operations)
+  - Adjusted Prisma findTuples to no longer treat an explicitly-undefined condition filter as "condition IS NULL" (now matches the in-memory reference: no constraint), noting it was unreachable through the engine
+  - Updated RoleRegistry to reject "/" in tenant ids (prevents cross-tenant permissionMatrix contamination via prefix parsing)
+  - Documented the getRolePermissions/permissionMatrix on-scope difference and the in-memory adapter's live-reference semantics
+  - The InMemoryRoleCatalog source contained a raw NUL byte as its composite-key separator, making the file binary to git; it is now the \u0000 escape sequence (identical runtime separator, valid text source).
+- facb988: The shared storage-adapter contract test suite is now published as the polizy/storage-tests subpath (previously README claimed it shipped but it was not in the build); the intermediate dist/types folder is no longer published.
+- facb988: - Allowed partial `hierarchyPropagation` maps in schema definitions so users do not need to pad with empty arrays for unpropagated actions. Invalid or typo'd keys and values continue to fail at compile-time.
+  - Refactored `AttributePredicate` to be a discriminated union based on the comparison operator, ensuring that operators like `eq`/`ne` enforce a scalar type, `in`/`nin` enforce an array type, and inequality operators (`gt`/`gte`/`lt`/`lte`) enforce a number type at compile time.
+  - Documented `maxDepth`'s group-membership expansion semantics in JSDoc, clarifying that it bounds group-membership expansion only and not hierarchy depth.
+- facb988: - Standardized read options across all public and read-scope authorization APIs via a unified `ReadOptions` type (supporting `contextualTuples`, `consistency`, and `preload`). Per-request contextual tuples are intentionally not supported on `checkMany` (one reader/batch).
+  - Added `someoneCan`, `countSubjects`, and `countAccessibleObjects` to the `ReadScope` interface.
+  - Added pagination (`limit` and `offset`) parameters to `listSubjects`, applied after sorting.
+  - Enabled `checkOrThrow` to correctly accept and forward all `ReadOptions`.
+
+### Patch Changes
+
+- facb988: Docs, shipped-skill corrections, and hygiene fixes.
+
+  - Corrected troubleshooting documentation snippets (updated `addMember` to object-form, moved `fieldLevelObjects` to `defineSchema`, and renamed database model to `PolizyTuple`).
+  - Corrected the stale `O(candidates × check)` performance claim for list operations in the troubleshooting skill.
+  - Added the missing `0.3 → 0.4` migration guide.
+  - Fixed the `@@unique` constraint attribution in the migration router documentation.
+  - Documented three missing `AuthSystem` constructor options (`defaultGroupRelation`, `defaultHierarchyRelation`, and `nonSubjectTypes`) in the schema reference table.
+  - Removed the `console.warn` call in the in-memory storage adapter's delete operation to respect the silent-by-default logger contract.
+
+- facb988: - listSubjects/someoneCan/countSubjects on schemas with fieldLevelObjects now surface concrete subjects reachable through everyone(type) grants/memberships to group-acting types (previously check() allowed while the lists omitted them; field-free schemas were unaffected)
+  - isConditionValid now fails closed on malformed attribute shapes instead of throwing mid-check
+- facb988: Shipped-skill corrections for the 0.6 surface (published storage-tests subpath replaces copy-the-source guidance; transactionOptions; uniform read options + pagination; per-operator predicate types; malformed-condition and tenant-id behavior notes) and the new 0.5-to-0.6 migration guide.
+
 ## 0.5.0
 
 ### Minor Changes

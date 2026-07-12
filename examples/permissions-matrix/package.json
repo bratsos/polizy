@@ -1,6 +1,6 @@
 {
   "name": "example-permissions-matrix",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Runtime custom roles + a click-to-toggle permissions matrix, powered by polizy.",
