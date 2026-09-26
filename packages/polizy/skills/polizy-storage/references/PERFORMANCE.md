@@ -51,10 +51,24 @@ model PolizyTuple {
 }
 ```
 
-These two indexes are exactly the hot paths `check()` walks: it repeatedly asks
-"what groups/parents does this subject have?" (`findObjects`) and "who are the
-members of this group / what's the parent of this object?" (`findSubjects`).
-With memoization each distinct lookup happens once per `check()`, so the index
+These two indexes are exactly the hot paths `check()` walks. Since 0.6.1 the
+read layer keys each read on the side whose size is bounded, as Zanzibar-style
+resolvers do:
+
+- **Object-anchored** (`objectType, objectId`): the direct-grant lookup reads
+  *everything on the checked object* — every relation and subject, wildcard
+  grants included — in one query. Bounded by who was granted access to that
+  one thing.
+- **Subject + relation** (`subjectType, subjectId, relation`): group
+  memberships ("which groups is this subject in?") and parent links ("what is
+  this object's parent?"). Bounded by the subject's groups or parents.
+
+A check never reads a subject's whole tuple set, so a prolific creator who
+owns thousands of objects costs the same to check as a user who owns three.
+The case to watch is the mirror image: an object with thousands of
+*individually named* subjects is read whole on every check that touches it.
+Grant such audiences through a group instead. Each distinct read happens once
+per operation (once per batch in `checkMany` / `withReadScope`), so the index
 quality of these two queries dominates check latency.
 
 ### High-Volume Indexes
@@ -474,9 +488,12 @@ machine-dependent — the scaling characteristics are the point.** Run the examp
 yourself to get figures for your own hardware and storage adapter.
 
 - **`check()` / `explain()` are ~constant-time in table size.** A check touches
-  only the query's subgraph (the subject's reachable set), not the whole table,
-  so latency holds steady as the store grows — roughly **~1ms at both ~7k and
-  ~35k tuples**. Growing the tuple count does not slow an individual check.
+  only the query's subgraph — the checked object's tuples, its parent chain and
+  the subject's memberships — not the whole table, so latency holds steady as
+  the store grows — roughly **~1ms at both ~7k and ~35k tuples**. Growing the
+  tuple count does not slow an individual check, and neither does the number of
+  unrelated tuples the *subject* holds (0.6.1+): reads are keyed on the object,
+  so a user who owns 10,000 things checks as fast as one who owns 10.
 - **`checkMany()` is ~3x faster than N separate `check()` calls.** It shares a
   single reader across the batch instead of re-establishing one per check. Prefer
   it whenever you have a list of permission questions to answer together.

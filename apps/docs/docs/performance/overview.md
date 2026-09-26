@@ -15,7 +15,7 @@ When you build deep relationship trees—like nested folder structures, organiza
 
 Every authorization query in polizy executes through a specialized, per-operation read layer. This layer optimizes how facts (tuples) are fetched and evaluated in memory:
 
-*   **Broad Range Reads**: Instead of querying the database for a single edge at a time, polizy requests broader ranges of related tuples once and resolves the rest of the path in memory.
+*   **Bounded Range Reads**: Instead of querying the database for a single edge at a time, polizy fetches a covering range once and resolves the rest of the path in memory. Each read is keyed on the side whose size is bounded, as Zanzibar-style resolvers do: a direct-grant lookup reads everything on the *checked object* (every relation, every subject, wildcard grants included), and a membership or parent lookup reads one relation of the subject. A check never loads a subject's entire tuple set, so a user who owns thousands of objects checks as fast as one who owns three.
 *   **Per-Check Memoization**: Within a single query, polizy caches sub-graph traversal results. If a check traverses the same subject, object, or relation along different evaluation paths, it hits your storage database only a handful of times, rather than querying it once for every single edge.
 *   **Shared Batch Reads**: When checking multiple permissions at once using `checkMany`, polizy shares a single reader instance across the entire batch, collapsing what would be dozens of separate database calls into a few optimized queries.
 *   **Uniform Read Options**: Every query and check method in polizy accepts a uniform set of read options: `{ consistency?: "default" | "strong"; contextualTuples?: InputTuple[]; preload?: boolean }` to configure snapshot isolation, draft mock data, or preloading.
@@ -49,7 +49,7 @@ What it shows (numbers are machine-dependent — what matters is how they *scale
 
 What it shows (numbers are machine-dependent — what matters is how they *scale*):
 
-*   **`check` and `explain` are roughly constant-time** in the table size — about **1 ms** at ~7k, ~35k, and ~83k tuples. A check touches only the query's subgraph (a handful of broadened range reads), not the whole table. This is the core ReBAC scaling property.
+*   **`check` and `explain` are roughly constant-time** in the table size — about **1 ms** at ~7k, ~35k, and ~83k tuples. A check touches only the query's subgraph (a handful of object- and relation-keyed range reads), not the whole table, and its cost does not grow with the number of unrelated tuples the subject holds. This is the core ReBAC scaling property. The one shape to avoid is an object with thousands of *individually named* subjects — every check on it reads that whole ACL; grant such audiences through a group.
 *   **`checkMany` is ~3× faster than N separate `check` calls**, because it shares one reader across the batch.
 *   **`listSubjects` / `listAccessibleObjects` are now near-linear and sub-second** at scale. At 83k tuples, `listSubjects` is ~566 ms (was ~43 s — ~76×) and `listAccessibleObjects` ~799 ms (was ~18 s — ~23×). Two things got them there:
     *   **Index both read paths.** The original cost was object-anchored gather reads running as full table scans. The bundled Prisma adapter indexes `(objectType, objectId, relation)`; a custom adapter **must** too (see [Custom adapters](../storage/custom-adapter.md)).

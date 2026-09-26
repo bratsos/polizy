@@ -145,10 +145,10 @@ When filtering tuples via `findTuples()`, if the `condition` key is explicitly p
 polizy reads tuples two ways, and **both must be indexed** or list operations
 degrade to full table scans at scale:
 
-- **Subject-anchored:** `WHERE subjectType = ? AND subjectId = ?` — "what does this subject have?" (the `check` walk).
-- **Object-anchored:** `WHERE objectType = ? AND objectId = ?` — "who holds this object?" (`findSubjects`, reverse expansion, and the `listSubjects` / `listAccessibleObjects` gather).
+- **Subject-anchored:** `WHERE subjectType = ? AND subjectId = ? AND relation = ?` — "which groups is this subject in?", "what is this object's parent?" (the `check` walk's membership and hierarchy hops), and the bare `subjectType, subjectId` form for `listAccessibleObjects`.
+- **Object-anchored:** `WHERE objectType = ? AND objectId = ?` — "who holds this object?" (the `check` walk's direct-grant lookup, `findSubjects`, reverse expansion, and the `listSubjects` / `listAccessibleObjects` gather).
 
-A common mistake is to rely on a single `UNIQUE (subjectType, subjectId, relation, objectType, objectId)` constraint: its left prefix serves subject-anchored reads, but object-anchored reads are **not** a prefix of it, so they fall back to a full scan. That makes the list operations scale super-linearly with the table size. Add an explicit object index (the bundled Prisma adapter already ships both):
+A common mistake is to rely on a single `UNIQUE (subjectType, subjectId, relation, objectType, objectId)` constraint: its left prefix serves subject-anchored reads, but object-anchored reads are **not** a prefix of it, so they fall back to a full scan. That makes every `check` (whose direct-grant read is object-anchored) and the list operations scale super-linearly with the table size. Add an explicit object index (the bundled Prisma adapter already ships both):
 
 ```sql
 CREATE INDEX polizy_tuple_subject_idx ON polizy_tuple (subject_type, subject_id, relation);

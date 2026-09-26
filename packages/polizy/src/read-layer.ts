@@ -69,8 +69,8 @@ type CachedSet<S extends SubjectType, O extends ObjectType> = {
  * The engine asks tiny questions — `findTuples({subject, relation, object})`
  * ("does this one edge exist?") — over and over, re-fetching invariants like a
  * subject's group memberships on every recursion. For one logical operation the
- * tuple set is stable, so we instead fetch the BROADEST covering query once
- * (everything for that subject, or that object, or that relation), cache it, and
+ * tuple set is stable, so we instead fetch a covering range once (everything on
+ * that object, or one relation of that subject — see `plan`), cache it, and
  * filter in memory. `findSubjects`/`findObjects` derive from the same cache, so
  * the whole operation shares one set of reads. On a measured workload this
  * collapsed 177 storage reads to single digits with identical results.
@@ -95,18 +95,44 @@ export class ReadCache<S extends SubjectType, O extends ObjectType>
     this.contextual = contextual;
   }
 
-  /** Map a specific filter to its broadest covering query (and a cache key). */
-  private broaden(f: Partial<InputTuple<S, O>>): {
+  /**
+   * Map a filter to the cached set that answers it, and the storage query that
+   * fills that set on a miss. Reads are keyed on the side whose size is
+   * bounded, as Zanzibar-style resolvers do:
+   *
+   * - a filter naming an object reads that object's whole set (every subject
+   *   and relation on it, wildcard grants included) — bounded by who was
+   *   granted access to that one thing;
+   * - a filter naming a subject and a relation reads just that relation for
+   *   the subject (its group memberships, an object's parent links) — bounded
+   *   by the subject's groups or parents;
+   * - a bare subject reads the subject's whole set (`listAccessibleObjects`).
+   *
+   * A subject's whole set is never fetched for a check, so a subject holding
+   * thousands of unrelated tuples (a prolific creator) costs the same as one
+   * holding a few. A set already cached by a wider key is reused first.
+   */
+  private plan(f: Partial<InputTuple<S, O>>): {
     key: string;
-    broad: Partial<InputTuple<S, O>>;
+    query: Partial<InputTuple<S, O>>;
   } {
-    if (f.subject)
-      return { key: `s:${objKey(f.subject)}`, broad: { subject: f.subject } };
+    if (f.subject) {
+      const sKey = `s:${objKey(f.subject)}`;
+      if (this.sets.has(sKey)) return { key: sKey, query: {} };
+      if (f.object)
+        return { key: `o:${objKey(f.object)}`, query: { object: f.object } };
+      if (f.relation)
+        return {
+          key: `sr:${sKey}\u0000${f.relation}`,
+          query: { subject: f.subject, relation: f.relation },
+        };
+      return { key: sKey, query: { subject: f.subject } };
+    }
     if (f.object)
-      return { key: `o:${objKey(f.object)}`, broad: { object: f.object } };
+      return { key: `o:${objKey(f.object)}`, query: { object: f.object } };
     if (f.relation)
-      return { key: `r:${f.relation}`, broad: { relation: f.relation } };
-    return { key: "*", broad: {} };
+      return { key: `r:${f.relation}`, query: { relation: f.relation } };
+    return { key: "*", query: {} };
   }
 
   async findTuples(
@@ -116,16 +142,16 @@ export class ReadCache<S extends SubjectType, O extends ObjectType>
     // by a read scope's preload), serve every query from it — no narrower reads.
     let entry = this.sets.get("*");
     if (!entry) {
-      const { key, broad } = this.broaden(filter);
+      const { key, query } = this.plan(filter);
       entry = this.sets.get(key);
       if (!entry) {
-        entry = this.fetch(broad);
+        entry = this.fetch(query);
         this.sets.set(key, entry);
       }
     }
     const { all, byRelation, bySubject, byObject } = await entry;
     // Narrow to the most selective index present (subject > object > relation),
-    // mirroring broaden()'s precedence and the adapter's own candidate router.
+    // mirroring plan()'s precedence and the adapter's own candidate router.
     // For a per-subject/-object cache the routed bucket equals `all`'s relevant
     // subset; for a preloaded "*" set it avoids scanning a whole relation bucket
     // (a hot wildcard principal, a big team). matches() then applies the rest.
@@ -139,11 +165,11 @@ export class ReadCache<S extends SubjectType, O extends ObjectType>
     return fromContext.length ? [...base, ...fromContext] : base;
   }
 
-  /** Fetch a broad set once and index it by relation, subject, and object. */
+  /** Fetch a covering set once and index it by relation, subject, and object. */
   private async fetch(
-    broad: Partial<InputTuple<S, O>>,
+    query: Partial<InputTuple<S, O>>,
   ): Promise<CachedSet<S, O>> {
-    const all = await this.storage.findTuples(broad);
+    const all = await this.storage.findTuples(query);
     const byRelation = new Map<string, StoredTuple<S, O>[]>();
     const bySubject = new Map<string, StoredTuple<S, O>[]>();
     const byObject = new Map<string, StoredTuple<S, O>[]>();

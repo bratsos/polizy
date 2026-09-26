@@ -164,6 +164,22 @@ For more information, see [Field-Level Permissions](../guides/field-level-permis
 
 ---
 
+## check() is slow for one user who owns many objects
+
+**Symptom:** checks for one subject take far longer than for others, and the
+storage log shows `WHERE subjectType = ? AND subjectId = ?` with no relation or
+object filter returning thousands of rows.
+
+**Cause:** polizy versions before 0.6.1 loaded a subject's whole tuple set on
+every read pass, so a user who had created thousands of objects paid for all of
+them on every check.
+
+**Fix:** upgrade to 0.6.1 or later. Direct-grant reads are now keyed on the
+checked object and membership reads on subject + group relation, so a subject's
+unrelated tuples are never read. If instead a specific *object* is slow, it has
+a very large ACL of individually named subjects; grant that audience through a
+group relation.
+
 ## consistency: 'strong' seems ignored
 
 * **Symptom:** You request a check with `{ consistency: "strong" }` but reads do not feel consistent, or isolated snapshots are not used.
