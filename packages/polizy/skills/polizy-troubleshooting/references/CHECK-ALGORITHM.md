@@ -292,6 +292,8 @@ need to exhaust other paths once one succeeds.
 | Shared subgraphs (diamonds) | Resolved once thanks to memo | Free in 0.3.0 |
 | Cycles | Terminate via `visited`; cost bounded by `defaultCheckDepth` | Avoid circular groups anyway |
 | Tuple count | Larger index scans per `findTuples` | Ensure DB indexes on `(subject..., relation)` and `(object..., relation)` |
+| Subject with many unrelated tuples (a user who created thousands of objects) | None since 0.6.1 — direct-grant reads are keyed on the *object*, so the subject's other tuples are never loaded | Nothing to do; before 0.6.1 every check loaded the subject's whole set — upgrade |
+| Object with a very large ACL (thousands of individually named subjects) | Every check on it reads the whole ACL | Grant the audience via a group relation instead of one tuple per subject |
 
 ## Debugging the Algorithm
 

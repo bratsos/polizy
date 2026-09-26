@@ -200,6 +200,70 @@ describe("read batching (fetch-then-resolve)", () => {
   });
 });
 
+describe("read cost for a subject with many tuples", () => {
+  it("a check does not read the subject's unrelated tuples", async () => {
+    const counter = new CountingAdapter(
+      new InMemoryStorageAdapter<
+        "user" | "team",
+        "document" | "folder" | "team"
+      >(),
+    );
+    let rows = 0;
+    const read = counter.findTuples;
+    counter.findTuples = async (f, o) => {
+      const res = await read(f, o);
+      rows += res.length;
+      return res;
+    };
+    const authz = new AuthSystem({ schema, storage: counter });
+    await authz.allowMany(
+      Array.from({ length: 2000 }, (_, i) => ({
+        who: USER("heavy"),
+        toBe: "owner" as const,
+        onWhat: DOC(`own-${i}`),
+      })),
+    );
+    await authz.allow({
+      who: USER("heavy"),
+      toBe: "owner",
+      onWhat: FOLDER("f"),
+    });
+    await authz.setParent({ child: DOC("target"), parent: FOLDER("f") });
+    await authz.addMember({ member: USER("heavy"), group: TEAM("t") });
+
+    rows = 0;
+    const request = {
+      who: USER("heavy"),
+      canThey: "edit",
+      onWhat: DOC("target"),
+    } as const;
+    assert.equal(await authz.check(request), true);
+    assert.equal((await authz.explain(request)).allowed, true);
+    assert.ok(
+      rows < 50,
+      `expected only path tuples to be read, got ${rows} rows`,
+    );
+
+    // Reads in a batch scale with the distinct objects checked, not with the
+    // subject's tuple count: 100 checks over 10 objects dedupe to one read per
+    // object plus the subject's membership reads.
+    counter.reads = 0;
+    rows = 0;
+    await authz.checkMany(
+      Array.from({ length: 100 }, (_, i) => ({
+        who: USER("heavy"),
+        canThey: "delete" as const,
+        onWhat: DOC(`own-${i % 10}`),
+      })),
+    );
+    assert.ok(counter.reads <= 15, `expected ~10 reads, got ${counter.reads}`);
+    assert.ok(
+      rows < 50,
+      `expected only path tuples to be read, got ${rows} rows`,
+    );
+  });
+});
+
 describe("read-layer identity", () => {
   it("treats objects with extra properties as distinct (full-value identity)", async () => {
     const storage = new InMemoryStorageAdapter<
