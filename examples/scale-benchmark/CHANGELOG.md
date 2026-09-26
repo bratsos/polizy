@@ -1,5 +1,12 @@
 # example-scale-benchmark
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [fe02272]
+  - polizy@0.6.1
+
 ## 0.1.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # example-app1
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [fe02272]
+  - polizy@0.6.1
+
 ## 0.1.6
 
 ### Patch Changes
