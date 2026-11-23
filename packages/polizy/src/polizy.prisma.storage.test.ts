@@ -1,5 +1,6 @@
+import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { after, before, describe } from "node:test";
+import { after, afterEach, before, describe, it } from "node:test";
 import { PrismaClient } from "../prisma/client-generated/index.js";
 import { PrismaAdapter } from "./polizy.prisma.storage.ts";
 
@@ -46,7 +47,6 @@ describe("PrismaStorageAdapter Tests", () => {
 
   const prismaTestContext: StorageAdapterTestContext = {
     getAdapter: async () => {
-      // @ts-ignore
       return PrismaAdapter<SharedTestSubject, SharedTestObject>(prisma);
     },
     cleanup: async () => {
@@ -55,4 +55,79 @@ describe("PrismaStorageAdapter Tests", () => {
   };
 
   defineStorageAdapterTestSuite("PrismaStorageAdapter", prismaTestContext);
+
+  describe("bound to an interactive transaction", () => {
+    afterEach(async () => {
+      await prisma.polizyTuple.deleteMany({});
+    });
+
+    it("reads and writes through the caller's transaction and offers no snapshot", async () => {
+      const tuple = {
+        subject: { type: "user" as const, id: "tx-u" },
+        relation: "viewer",
+        object: { type: "document" as const, id: "tx-d" },
+      };
+      await assert.rejects(
+        prisma.$transaction(async (tx) => {
+          const adapter = PrismaAdapter<SharedTestSubject, SharedTestObject>(
+            tx,
+          );
+          assert.strictEqual(adapter.withSnapshot, undefined);
+          await adapter.write([tuple, { ...tuple, relation: "editor" }]);
+          const found = await adapter.findTuples({ subject: tuple.subject });
+          assert.strictEqual(found.length, 2);
+          assert.strictEqual(await adapter.delete({ was: "editor" }), 1);
+          throw new Error("roll back");
+        }),
+        /roll back/,
+      );
+      assert.strictEqual(
+        await prisma.polizyTuple.count(),
+        0,
+        "the writes belonged to the caller's transaction and rolled back with it",
+      );
+    });
+  });
+
+  describe("client shapes", () => {
+    const tuple = {
+      subject: { type: "user" as const, id: "shape-u" },
+      relation: "viewer",
+      object: { type: "document" as const, id: "shape-d" },
+    };
+    afterEach(async () => {
+      await prisma.polizyTuple.deleteMany({});
+    });
+
+    it("treats a hand-made wrapper of the root client as a root client", async () => {
+      const wrapper = {
+        $transaction: prisma.$transaction.bind(prisma),
+        polizyTuple: prisma.polizyTuple,
+      };
+      const adapter = PrismaAdapter<SharedTestSubject, SharedTestObject>(
+        wrapper as never,
+      );
+      assert.ok(adapter.withSnapshot, "a root client offers snapshots");
+      // The second upsert fails validation, after the first one ran.
+      const invalid = { ...tuple, relation: undefined as unknown as string };
+      await assert.rejects(adapter.write([tuple, invalid]));
+      assert.strictEqual(await prisma.polizyTuple.count(), 0);
+    });
+
+    it("rejects an object that can neither open a transaction nor is one", () => {
+      assert.throws(
+        () => PrismaAdapter({ polizyTuple: prisma.polizyTuple }),
+        /could not be atomic/,
+      );
+    });
+
+    it("treats an extended client with an `orm` member as Prisma 6/7", async () => {
+      const extended = prisma.$extends({ client: { orm: { public: {} } } });
+      const adapter = PrismaAdapter<SharedTestSubject, SharedTestObject>(
+        extended,
+      );
+      await adapter.write([tuple]);
+      assert.strictEqual((await adapter.findTuples({})).length, 1);
+    });
+  });
 });

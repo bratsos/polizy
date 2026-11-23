@@ -1906,6 +1906,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
                 via: wrap(target, {
                   kind: "direct",
                   relation: relation as string,
+                  tuple,
                 }),
                 stable: true,
               };
@@ -1925,6 +1926,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
                   via: wrap(target, {
                     kind: "wildcard",
                     relation: relation as string,
+                    tuple,
                   }),
                   stable: true,
                 };
@@ -1970,6 +1972,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
                 kind: "group",
                 relation: groupRelation,
                 through: membership.object as AnyObject,
+                tuple: membership,
                 via: child.via,
               },
               stable: true,
@@ -2009,6 +2012,7 @@ export class AuthSystem<S extends AuthSchema<any, any, any, any, any>> {
                         kind: "hierarchy",
                         relation: hierRelation,
                         parent: link.object as AnyObject,
+                        tuple: link,
                         via: child.via,
                       }),
                       stable: true,

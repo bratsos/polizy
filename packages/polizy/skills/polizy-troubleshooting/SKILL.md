@@ -4,7 +4,7 @@ description: Debug and fix polizy authorization issues. Use when permission chec
 license: MIT
 metadata:
   author: bratsos
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/bratsos/polizy
 ---
 

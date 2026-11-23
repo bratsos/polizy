@@ -4,7 +4,7 @@ description: Setup and installation guide for the polizy authorization library. 
 license: MIT
 metadata:
   author: bratsos
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -42,12 +42,17 @@ pnpm add polizy
 yarn add polizy
 ```
 
-Requires **Node >= 22.11.0**. polizy ships both ESM and CJS builds. The Prisma
-adapter needs `@prisma/client` (an **optional** peer dependency) — install it only
-if you use persistent storage:
+Requires **Node >= 22.11.0** (Prisma 7 requires Node 22.12+ or 24+). polizy ships both ESM and CJS builds. The Prisma
+adapter works with Prisma 6 or 7 via `@prisma/client` (`^6.0.0 || ^7.0.0`, an
+**optional** peer dependency) or Prisma 8 via `@prisma/orm-postgres` (no polizy
+peer dependency needed) — install one only if you use persistent storage:
 
 ```bash
+# Prisma 6 / 7
 npm install @prisma/client && npm install -D prisma
+
+# Prisma 8
+npm install @prisma/orm-postgres pg temporal-polyfill && npm install -D prisma @types/pg
 ```
 
 ### Step 2: Define Schema
@@ -91,23 +96,28 @@ import { InMemoryStorageAdapter } from "polizy";
 const storage = new InMemoryStorageAdapter();
 ```
 
-**For production (Prisma):**
+**For production (Prisma 6, 7, or 8):**
 ```typescript
 import { PrismaStorageAdapter } from "polizy/prisma-storage"; // alias of PrismaAdapter
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client"; // Prisma 7 uses a driver adapter (e.g. @prisma/adapter-pg); Prisma 8 uses @prisma/orm-postgres
 
 const prisma = new PrismaClient();
 const storage = PrismaStorageAdapter(prisma); // factory function — call it, no `new`
 ```
 
 The Prisma adapter lives on the `polizy/prisma-storage` subpath (the core `polizy`
-entry never imports `@prisma/client`, so it stays an optional peer dependency).
+entry never imports Prisma, so `@prisma/client` stays an optional peer dependency).
 `PrismaStorageAdapter` is a **factory function**, not a class — call it directly,
 do not `new` it. `PrismaAdapter` is the same function under its original name.
 
+**Choosing root client vs transaction client:**
+
+- **Root client (`PrismaAdapter(prisma)` / `PrismaAdapter(db)`):** Use for standard app-wide authorization. `write()` runs atomically and `consistency: "strong"` opens a snapshot transaction via `withSnapshot`.
+- **Transaction client (`PrismaAdapter(tx)`):** Pass `tx` from `prisma.$transaction(async (tx) => ...)` (Prisma 6/7) or `db.transaction(async (tx) => ...)` (Prisma 8) when checks and writes must share the caller's uncommitted writes, isolation level, or RLS (`SET LOCAL` / `set_config`). With `tx`, there is no `withSnapshot`, so `"strong"` runs on `tx` directly, and `write()` runs sequentially on `tx` (atomic with the caller's transaction).
+
 This requires a `PolizyTuple` model (with a compound `@@unique` constraint) plus a
-`prisma generate` + migrate step. See [PRISMA-SETUP.md](references/PRISMA-SETUP.md)
-for the model, migration commands, and details.
+`prisma generate` + migrate step (or `contract.prisma` + `prisma contract emit` on Prisma 8). See [PRISMA-SETUP.md](references/PRISMA-SETUP.md)
+for Prisma 6, 7, and 8 setup, models, and migration commands.
 
 ### Step 4: Create AuthSystem
 
@@ -245,7 +255,7 @@ After setup, use these skills:
 - **[polizy-patterns](../polizy-patterns/SKILL.md)** - Implement authorization scenarios
 - **[polizy-storage](../polizy-storage/SKILL.md)** - Production storage setup, custom adapters (validated with the published `polizy/storage-tests` suite), performance
 
-> **New in 0.6.0:** polizy simplifies setup under TypeScript by allowing bare `new InMemoryStorageAdapter()` / `PrismaAdapter(client)` to compose directly with literal-typed schemas under strict type-checking, removing variance generic artifacts.
+> **New in 0.7.0:** `PrismaAdapter` and `PrismaRoleCatalog` support Prisma 6, 7, and 8 as well as interactive transaction clients (`tx`). `ExplainNode` adds `tuple: StoredTuple` on non-field nodes, and `ReadOnlyStorage`/`Relation` are exported from `polizy`. See [migrate-0.6-to-0.7.md](../polizy/migrations/migrate-0.6-to-0.7.md).
 
 ## References
 

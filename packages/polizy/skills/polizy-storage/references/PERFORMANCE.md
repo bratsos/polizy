@@ -51,9 +51,10 @@ model PolizyTuple {
 }
 ```
 
-These two indexes are exactly the hot paths `check()` walks. Since 0.6.1 the
-read layer keys each read on the side whose size is bounded, as Zanzibar-style
-resolvers do:
+These two indexes are exactly the hot paths `check()` walks. Since 0.6.1, the
+engine reads storage only through `findTuples` (using filter shapes `{ object }`,
+`{ subject, relation }`, `{ subject }`, `{ relation }`, and `{}` for `preload`),
+keying each read on the side whose size is bounded, as Zanzibar-style resolvers do:
 
 - **Object-anchored** (`objectType, objectId`): the direct-grant lookup reads
   *everything on the checked object* — every relation and subject, wildcard
@@ -63,12 +64,15 @@ resolvers do:
   memberships ("which groups is this subject in?") and parent links ("what is
   this object's parent?"). Bounded by the subject's groups or parents.
 
-A check never reads a subject's whole tuple set, so a prolific creator who
-owns thousands of objects costs the same to check as a user who owns three.
-The case to watch is the mirror image: an object with thousands of
-*individually named* subjects is read whole on every check that touches it.
-Grant such audiences through a group instead. Each distinct read happens once
-per operation (once per batch in `checkMany` / `withReadScope`), so the index
+On a schema with direct relations plus one hierarchy (e.g., `property -> account`),
+measured storage reads per `check()` are: direct allow = 1, allow via parent
+account = 3, deny = 4, and with `preload: true` = 1 (`findTuples({})`). A check
+never reads a subject's whole tuple set, so a prolific creator who owns thousands
+of objects costs the same to check as a user who owns three. The case to watch
+is the mirror image: an object with thousands of *individually named* subjects is
+read whole on every check that touches it. Grant such audiences through a group
+instead. Each distinct read happens once per operation (and `explain()` inside
+`withReadScope` shares the scope's cached reads with `check()`), so the index
 quality of these two queries dominates check latency.
 
 ### High-Volume Indexes
@@ -509,7 +513,10 @@ yourself to get figures for your own hardware and storage adapter.
 - **`someoneCan` short-circuits**; **`countSubjects` / `countAccessibleObjects`
   compute the full set today** (`O(reachable)`), so they cost about the same as
   the corresponding list call.
-- **`ReadOptions` (including `preload`) are uniform across all read operations.** The option object `{ consistency?: "default"|"strong"; contextualTuples?; preload?: boolean }` is supported on `check`, `checkMany` (shared batch-wide, per-request not supported), `checkOrThrow`, `explain` (new optional 2nd arg), `listSubjects`, `listAccessibleObjects`, `someoneCan`, `countSubjects`, `countAccessibleObjects`, and `withReadScope` (scope-wide). Operations executed within `withReadScope` accept no per-operation read options since they share a single reader. Note that `{ preload: true }` fetches the whole tuple set in one read and resolves in memory — a win only when per-query round-trips dominate (a remote DB, an in-browser DB). Over a properly indexed local store the direct path is already sub-second, so omit it and let each query fetch only the subgraphs it needs.
+- **`ReadOptions` (including `preload` and `consistency`) are uniform across all read operations.** The option object `{ consistency?: "default"|"strong"; contextualTuples?; preload?: boolean }` is supported on `check`, `checkMany` (shared batch-wide, per-request not supported), `checkOrThrow`, `explain`, `listSubjects`, `listAccessibleObjects`, `someoneCan`, `countSubjects`, `countAccessibleObjects`, and `withReadScope` (scope-wide). Operations executed within `withReadScope` accept no per-operation read options since they share a single reader (and `explain()` inside `withReadScope` shares cached reads with `check()`).
+- **`preload: true` fetches every visible tuple in one `findTuples({})` call.** The whole check then resolves in memory against one statement-level snapshot even under `READ COMMITTED`. This helps when RLS or a tenant-scoped store keeps the visible set small (or round-trips dominate), and hurts on a large shared table where per-subgraph reads are smaller.
+- **`contextualTuples` are merged, not bypassed.** Contextual tuples are merged with stored tuples for that call; they do not skip storage reads (a check satisfied by contextual tuples still reads storage — 1 read in the direct+hierarchy measurement).
+- **`consistency: "strong"` and transaction clients:** On a root Prisma client, `withSnapshot` opens a new interactive transaction on a separate connection, so it does not see uncommitted writes or session-local RLS settings (`SET LOCAL` / `set_config`). Pass `PrismaAdapter(tx)` to check inside your own transaction: `"strong"` then runs directly on `tx` (under `REPEATABLE READ`, the caller's transaction provides one snapshot; under `READ COMMITTED`, each statement sees latest commits, or add `preload: true` for one read).
 
 See `examples/scale-benchmark` for the playground that produces these findings
 (run it **in-memory** — an IndexedDB-backed PGlite measures the browser's disk

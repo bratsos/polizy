@@ -1,0 +1,27 @@
+// use prisma-8
+// The two models polizy's PrismaAdapter and PrismaRoleCatalog read and write.
+
+model PolizyTuple {
+  id          String @id @onCreate(cuid(2))
+  subjectType String
+  subjectId   String
+  relation    String
+  objectType  String
+  objectId    String
+  condition   Jsonb?
+
+  @@unique([subjectType, subjectId, relation, objectType, objectId])
+  @@index([subjectType, subjectId, relation])
+  @@index([objectType, objectId, relation])
+}
+
+model PolizyRole {
+  id      String  @id @onCreate(cuid(2))
+  tenant  String
+  key     String
+  label   String?
+  actions Jsonb
+
+  @@unique([tenant, key])
+  @@index([tenant])
+}

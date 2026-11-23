@@ -1,0 +1,25 @@
+{
+  "name": "polizy-prisma8-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Runs polizy's Prisma adapter against Prisma 8 (@prisma/orm-postgres) on PostgreSQL.",
+  "type": "module",
+  "scripts": {
+    "setup-db": "prisma contract emit && prisma db update",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@prisma/orm-postgres": "8.0.0-rc.25",
+    "pg": "^8.22.0",
+    "polizy": "workspace:*",
+    "temporal-polyfill": "^1.0.8"
+  },
+  "devDependencies": {
+    "@prisma/cli-engine": "0.10.4",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.20.0",
+    "prisma": "8.0.0-rc.35",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,4 @@
+# Emitted by `prisma contract emit` and `prisma db init` (pnpm setup-db)
+src/prisma/contract.json
+src/prisma/contract.d.ts
+migrations/

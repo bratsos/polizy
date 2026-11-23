@@ -319,14 +319,25 @@ export interface ListAccessibleObjectsResult<
  * granted. Produced by `explain()`.
  */
 export type ExplainNode =
-  | { kind: "direct"; relation: string }
-  | { kind: "wildcard"; relation: string }
+  /** `tuple`: the grant tuple that matched. */
+  | { kind: "direct"; relation: string; tuple: StoredTuple }
+  /** `tuple`: the `everyone(type)` grant tuple that matched. */
+  | { kind: "wildcard"; relation: string; tuple: StoredTuple }
   | { kind: "field"; base: AnyObject; via: ExplainNode }
-  | { kind: "group"; relation: string; through: AnyObject; via: ExplainNode }
+  /** `tuple`: the membership tuple (subject -> group) that was followed. */
+  | {
+      kind: "group";
+      relation: string;
+      through: AnyObject;
+      tuple: StoredTuple;
+      via: ExplainNode;
+    }
+  /** `tuple`: the parent-link tuple (child -> parent) that was followed. */
   | {
       kind: "hierarchy";
       relation: string;
       parent: AnyObject;
+      tuple: StoredTuple;
       via: ExplainNode;
     };
 

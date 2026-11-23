@@ -60,16 +60,37 @@ interface StorageAdapter<
     relation: Relation,
     options?: { objectType?: O },
   ): Promise<AnyObject<O>[]>;
+
+  /**
+   * Optional: run `fn` against a read-only snapshot pinned to a single point in time.
+   */
+  withSnapshot?<T>(
+    fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>,
+  ): Promise<T>;
 }
 ```
 
 > The generics are `SubjectType`/`ObjectType` (string unions of your type
-> names), not the schema object. `Relation` is a string. There is no `distinct`
+> names), not the schema object. `Relation` is a string (`Relation` and `ReadOnlyStorage` are exported as types from `"polizy"`). There is no `distinct`
 > option — `findSubjects`/`findObjects` must **always** return de-duplicated
 > results.
 >
 > [!NOTE]
 > `StorageAdapter` has an optional `@internal` phantom `_types` marker (used as a compile-time variance device). Custom adapters never implement it.
+
+## How the Engine Reads Storage
+
+Since 0.6.1, the engine reads storage **only through `findTuples`**. It never calls `findSubjects` or `findObjects` on the adapter, though both remain part of `StorageAdapter` and are tested by the shared contract suite. Writes use `write` and `delete`; `consistency: "strong"` reads use `withSnapshot` when present (falling back to live reads when omitted).
+
+The engine sends five filter shapes to `findTuples`:
+
+- `{ object }` — direct grants on the checked object
+- `{ subject, relation }` — group memberships and parent links
+- `{ subject }` — reverse / subject-side lookups
+- `{ relation }` — relation-wide lookups
+- `{}` — full read for `preload: true`
+
+`listTuples` passes the caller's filter plus `{ limit, offset }`. Index `(objectType, objectId, relation)` and `(subjectType, subjectId, relation)`.
 
 ## The Contract (must hold, or `check()` misbehaves)
 
@@ -652,6 +673,15 @@ defineStorageAdapterTestSuite({
   },
 });
 ```
+
+In 0.7.0, the shared suite added 6 contract tests (custom adapters that passed 0.6's suite may fail these):
+
+1. Full `condition` round-trip (`validSince`, `validUntil`, and `attributes`).
+2. Re-writing a tuple without a `condition` keeps its existing condition intact.
+3. Stable and complete `limit`/`offset` pagination across pages.
+4. `findTuples({})` returns every stored tuple.
+5. `findSubjects` and `findObjects` with and without a type filter (`subjectType` / `objectType`).
+6. `withSnapshot` (run only if implemented) sees previously written tuples.
 
 ## Best Practices
 

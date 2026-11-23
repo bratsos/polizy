@@ -34,7 +34,7 @@ await authz.check({ who: { type: "user", id: "alice" }, canThey: "edit", onWhat:
 npm install polizy      # or: pnpm add polizy / yarn add polizy
 ```
 
-The Prisma adapter requires `@prisma/client` (an optional peer dependency) — install it only if you use persistent storage.
+The Prisma adapter works with Prisma 6 or 7 via `@prisma/client` (an optional peer dependency) or Prisma 8 via `@prisma/orm-postgres` — install one only if you use persistent storage.
 
 ## Core concepts
 
@@ -96,18 +96,25 @@ import { InMemoryStorageAdapter } from "polizy";
 const storage = new InMemoryStorageAdapter(); // data lost on restart — great for tests
 ```
 
-For persistence, use the Prisma adapter from the `polizy/prisma-storage` subpath (kept separate so the core import never pulls in `@prisma/client`):
+For persistence, use the Prisma adapter from `polizy/prisma-storage` (kept separate so the core import never pulls in Prisma). It supports Prisma 6, Prisma 7 (`@prisma/adapter-pg`), and Prisma 8 (`@prisma/orm-postgres`), and accepts either a root client or a transaction client (`tx`):
 
 ```ts
 import { PrismaStorageAdapter } from "polizy/prisma-storage"; // alias of PrismaAdapter
 import { PrismaClient } from "@prisma/client";
 
-const storage = PrismaStorageAdapter(new PrismaClient());
+const prisma = new PrismaClient();
+const storage = PrismaStorageAdapter(prisma);
+
+// Or bind to an interactive transaction so checks and writes share uncommitted state and RLS:
+await prisma.$transaction(async (tx) => {
+  const txAuthz = new AuthSystem({ storage: PrismaStorageAdapter(tx), schema });
+  // ...
+});
 ```
 
-> `PrismaStorageAdapter` is a **factory function**, not a class — call it, don't `new` it. `PrismaAdapter` is the same function under its original name.
+> `PrismaStorageAdapter` is a **factory function**, not a class — call it, don't `new` it. `PrismaAdapter` is the same function under its original name. For Prisma 7, Prisma 8 (`contract.prisma` + `Jsonb`), and transaction-client details, see [the Prisma storage guide](https://polizy.dev/storage/prisma).
 
-Add a model to your `schema.prisma`. The unique constraint is **required** — it makes grants idempotent:
+Add a model to your `schema.prisma` (Prisma 6/7). The unique constraint is **required** — it makes grants idempotent:
 
 ```prisma
 model PolizyTuple {
@@ -272,7 +279,7 @@ await authz.check({ who, canThey: "edit", onWhat, consistency: "strong" });
 await authz.checkMany(requests, { consistency: "strong" });
 ```
 
-`"strong"` is served by the adapter's optional `withSnapshot`: the in-memory adapter copies the tuple set; the Prisma adapter runs the whole operation in one transaction — pass `PrismaAdapter(prisma, { snapshotIsolationLevel: "RepeatableRead", transactionOptions: { maxWait: 5000, timeout: 10000 } })` for Postgres MVCC (readers never block writers, writers never block readers; you can customize transactionOptions timeouts for strong-consistency operations over large stores). Adapters that don't implement it fall back to live reads.
+`"strong"` is served by the adapter's optional `withSnapshot`: the in-memory adapter copies the tuple set; on a root Prisma client, the adapter opens a new interactive transaction on a separate connection — pass `PrismaAdapter(prisma, { snapshotIsolationLevel: "RepeatableRead", transactionOptions: { maxWait: 5000, timeout: 10000 } })` for Postgres MVCC (readers never block writers, writers never block readers; Prisma 8 honors `transactionOptions.timeout` and has no `maxWait`, and honors `snapshotIsolationLevel` from `@prisma/orm-postgres` 8.0.0-rc.25). Because a root-client snapshot runs on a separate connection, it does not see uncommitted writes or session settings (`SET LOCAL` / `set_config`) from a caller's transaction; pass a transaction client (`PrismaAdapter(tx)`) to bind reads and writes to your transaction instead (it omits `withSnapshot`, so `"strong"` runs on your transaction directly). Adapters without `withSnapshot` fall back to live reads.
 
 **Read-your-writes without a round-trip:** pass freshly written (or not-yet-committed) facts as `contextualTuples`. They're evaluated as if stored, and never persisted:
 
@@ -377,6 +384,10 @@ Implement the `StorageAdapter` interface (`write`, `delete`, `findTuples`, `find
 * **Grants-only.** No deny tuples; model exceptions with narrower relations/objects.
 * **Conditions** cover time windows and attribute predicates — not a full policy language.
 * **No consistency tokens (yet).** `consistency: "strong"` pins one operation to a point-in-time snapshot, and `contextualTuples` give read-your-writes — but there are no Zanzibar "zookies"/new-enemy protection *across* operations. That layer is deferred until `polizy` grows caching/replicas that make it meaningful; today reads reflect committed tuples.
+
+## Migrating to 0.7.0
+
+0.7.0 adds Prisma 7 and Prisma 8 support, transaction-client binding (`PrismaAdapter(tx)` / `PrismaRoleCatalog(tx)`), `tuple: StoredTuple` on non-field `ExplainNode`s, `ReadOnlyStorage` and `Relation` type exports, and 6 new `polizy/storage-tests` contract checks. See [migrate-0.6-to-0.7.md](packages/polizy/skills/polizy/migrations/migrate-0.6-to-0.7.md) for the full checklist.
 
 ## Migrating from 0.2.x → 0.3.0
 

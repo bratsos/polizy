@@ -14,8 +14,8 @@ This skill activates when a user says things like:
 
 The router's job is to figure out **which migration guides to apply, in order**,
 given the version delta — and to apply them **step by step** even across several
-releases (e.g. `0.2.0 → 0.6.0` applies `0.2→0.3`, then `0.3→0.4`, then
-`0.4→0.5`, then `0.5→0.6`). The user should already have run their package manager's upgrade
+releases (e.g. `0.2.0 → 0.7.0` applies `0.2→0.3`, then `0.3→0.4`, then
+`0.4→0.5`, then `0.5→0.6`, then `0.6→0.7`). The user should already have run their package manager's upgrade
 command before invoking this; if not, run it for them (see "Package manager
 reference" below).
 
@@ -151,6 +151,14 @@ Files are named `migrate-X.Y-to-A.B.md`. If the package didn't ship a
 ```bash
 ls node_modules/polizy/skills/polizy/migrations/ 2>/dev/null
 ```
+
+Shipped migration guides:
+
+- [`migrate-0.2-to-0.3.md`](./migrate-0.2-to-0.3.md)
+- [`migrate-0.3-to-0.4.md`](./migrate-0.3-to-0.4.md)
+- [`migrate-0.4-to-0.5.md`](./migrate-0.4-to-0.5.md)
+- [`migrate-0.5-to-0.6.md`](./migrate-0.5-to-0.6.md)
+- [`migrate-0.6-to-0.7.md`](./migrate-0.6-to-0.7.md)
 
 ## Step 4 — Build the ordered migration chain
 
