@@ -30,9 +30,23 @@ Additionally, the `StorageAdapter` interface carries an optional `@internal` pha
 
 :::
 
+### Engine Read & Write Usage
+
+The polizy engine reads storage **only through `findTuples`**. It never calls `findSubjects` or `findObjects` on the adapter, though both remain part of `StorageAdapter` and are verified by the shared test suite. Writes use `write` and `delete`; strong-consistency reads use `withSnapshot` when present.
+
+The engine sends `findTuples` these filter shapes: `{ object }`, `{ subject, relation }`, `{ subject }`, `{ relation }`, and `{}` (preload). `listTuples` passes the caller's filter plus `limit` and `offset`.
+
 ---
 
 ## Core Types
+
+`Subject`, `AnyObject`, `TupleSubject`, `StoredTuple`, `InputTuple`, `Relation`, and `ReadOnlyStorage` are all exported as types from `"polizy"`.
+
+### Relation
+A string identifying the relationship between a subject and an object.
+```ts
+type Relation = string;
+```
 
 ### Subject
 Represents the actor initiating an action.
@@ -112,9 +126,9 @@ model PolizyTuple {
 1. **Compound Unique Index**  
    A unique constraint on `[subjectType, subjectId, relation, objectType, objectId]` is required to make grants idempotent and prevent duplicate facts.
 2. **Subject Index**  
-   An index on `[subjectType, subjectId, relation]` is required to optimize outbound subject lookups (resolving direct permission checks and listing objects).
+   An index on `[subjectType, subjectId, relation]` is required to optimize subject-anchored `findTuples` filters (`{ subject, relation }` and `{ subject }`).
 3. **Object Index**  
-   An index on `[objectType, objectId, relation]` is required to optimize outbound object lookups (resolving inheritance checks and listing subjects).
+   An index on `[objectType, objectId, relation]` is required to optimize object-anchored `findTuples` filters (`{ object }`).
 4. **Condition Store**  
    The `condition` column is optional and stores JSON context rules (such as time-based validity or environmental checks).
 
@@ -145,6 +159,7 @@ The matching logic must evaluate to:
 * When `withSnapshot` is called, the adapter must open a transaction/snapshot block at the database level.
 * All queries called on the provided `reader` parameter during `withSnapshot` must execute within that isolation level.
 * For relational databases, this should map to `RepeatableRead` (PostgreSQL) or similar read-only snapshot transaction levels.
+* An adapter built on a caller's active transaction should omit `withSnapshot` so `consistency: "strong"` reads stay on the caller's transaction.
 
 ### Find Tuples Condition Filtering Contract
 * When querying stored tuples via `findTuples(filter)`:
@@ -154,4 +169,13 @@ The matching logic must evaluate to:
 
 ## Verification & Testing
 
-To ensure your adapter satisfies these operational contracts, polizy publishes a shared cross-adapter test suite via `polizy/storage-tests`. You can import `defineStorageAdapterTestSuite` to run these exact assertions against your implementation. For a setup guide and example snippet, see [Writing a Custom Adapter](custom-adapter.md#testing-your-adapter).
+To ensure your adapter satisfies these operational contracts, polizy publishes a shared cross-adapter test suite via `polizy/storage-tests`. You can import `defineStorageAdapterTestSuite` to run these assertions against your implementation:
+
+* Write idempotency, order preservation, and re-writing without a `condition` preserving any existing condition.
+* Full `condition` round-trip (`validSince`, `validUntil`, `attributes`).
+* Logical AND `delete` filtering across `who`, `was`, and `onWhat`.
+* Stable and complete `limit`/`offset` pagination in `findTuples`, plus `findTuples({})` returning all stored tuples.
+* `findSubjects` and `findObjects` with and without a type filter.
+* `withSnapshot` seeing written tuples (executed only if `withSnapshot` is implemented).
+
+For a setup guide and example snippet, see [Writing a Custom Adapter](custom-adapter.md#testing-your-adapter).

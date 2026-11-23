@@ -4,7 +4,7 @@ description: Implementation patterns for polizy authorization. Use when implemen
 license: MIT
 metadata:
   author: bratsos
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/bratsos/polizy
 ---
 

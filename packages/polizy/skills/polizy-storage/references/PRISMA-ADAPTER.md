@@ -1,11 +1,13 @@
 # Prisma Adapter Setup
 
-Complete guide for setting up the Prisma storage adapter (`polizy 0.3.0`).
+Complete guide for setting up the Prisma storage adapter (`polizy 0.7.0`, supporting Prisma 6, 7, and 8).
 
 The adapter is exported from the **`polizy/prisma-storage`** subpath (so the core
 entry never pulls in `@prisma/client`) and is a **factory function**, not a
 class. `PrismaStorageAdapter` and `PrismaAdapter` are the same function under two
-names.
+names. One factory handles Prisma 6, Prisma 7, and Prisma 8 — the client's shape
+selects the backend automatically (a Prisma 8 client has `.orm`). Both root
+clients and interactive transaction clients (`tx`) are accepted.
 
 ```ts
 // ✅ 0.3.0
@@ -19,6 +21,8 @@ const storage = new PrismaStorageAdapter(prisma);
 
 ## Prerequisites
 
+**Prisma 6 or 7** (`@prisma/client` `^6.0.0 || ^7.0.0`, optional peer dependency):
+
 ```bash
 npm install @prisma/client
 npm install -D prisma
@@ -26,6 +30,17 @@ npm install -D prisma
 # Initialize Prisma if not already
 npx prisma init
 ```
+
+Prisma 7 requires Node 22.12+ or 24+, places the datasource URL in `prisma.config.ts`, and passes a driver adapter (such as `@prisma/adapter-pg`) to `new PrismaClient({ adapter })`. Both `prisma-client` and `prisma-client-js` generators work.
+
+**Prisma 8** (`@prisma/orm-postgres`, no polizy peer dependency required):
+
+```bash
+npm install @prisma/orm-postgres pg temporal-polyfill
+npm install -D prisma @types/pg
+```
+
+Requires TypeScript >= 5.9. For Prisma 8's `contract.prisma` and client setup, see [Prisma 8 Setup](#prisma-8-setup) below.
 
 ## Step 1: Add Prisma Model
 
@@ -90,11 +105,11 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 const storage = PrismaAdapter(prisma, {
-  // Optional configuration
-  snapshotIsolationLevel: "Serializable", // isolation level for consistency: "strong"
+  // Optional configuration (root clients only)
+  snapshotIsolationLevel: "RepeatableRead", // isolation level for consistency: "strong"
   transactionOptions: {
-    maxWait: 5000,    // maximum wait time (Prisma default is 2000ms)
-    timeout: 10000,   // timeout for the transaction (Prisma default is 5000ms)
+    maxWait: 5000,    // maximum wait time (Prisma 6/7 default 2000ms; ignored on Prisma 8)
+    timeout: 10000,   // timeout for the transaction (Prisma 6/7 default 5000ms)
   }, // raise these for strong-consistency list operations over large stores
 });
 
@@ -106,10 +121,106 @@ const authz = new AuthSystem({
 
 ## Model Name
 
-The adapter reads and writes the `PolizyTuple` model (`prisma.polizyTuple`).
-There is no option to point it at a differently named model — the factory takes
-only a `PrismaClient` (or an extended client). Keep the model named
-`PolizyTuple`.
+On Prisma 6 and 7, the adapter reads and writes the `PolizyTuple` model
+(`prisma.polizyTuple`). On Prisma 8, it reads `db.orm.public.PolizyTuple` (and
+`db.orm.public.PolizyRole` for `PrismaRoleCatalog`). Keep the models in the
+default `public` namespace with these exact model and field names.
+
+## Prisma 7 Setup Notes
+
+Prisma 7 uses the same `PolizyTuple` and `PolizyRole` models as Prisma 6, with
+the datasource URL configured in `prisma.config.ts` and a driver adapter passed
+to `PrismaClient`:
+
+```ts
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "./generated/prisma/client"; // or "@prisma/client"
+import { PrismaAdapter } from "polizy/prisma-storage";
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
+});
+const storage = PrismaAdapter(prisma);
+```
+
+Both `prisma-client` and `prisma-client-js` generators work, and `PrismaAdapter(prisma)` / `PrismaAdapter(tx)` type-check against generated Prisma 7 types with no casts.
+
+## Prisma 8 Setup
+
+Prisma 8 (`prisma` + `@prisma/orm-postgres`) uses a `contract.prisma` file instead of `schema.prisma`. The `// use prisma-8` first line is required, and `Jsonb` is required for `condition` and `actions` (plain `Json` maps to `json`, which has no equality filter; `Jsonb` works on rc.21+, whereas `Json(storage: jsonb)` fails on rc.21):
+
+```prisma
+// use prisma-8
+
+model PolizyTuple {
+  id          String @id @onCreate(cuid(2))
+  subjectType String
+  subjectId   String
+  relation    String
+  objectType  String
+  objectId    String
+  condition   Jsonb?
+
+  @@unique([subjectType, subjectId, relation, objectType, objectId])
+  @@index([subjectType, subjectId, relation])
+  @@index([objectType, objectId, relation])
+}
+
+// Only for PrismaRoleCatalog
+model PolizyRole {
+  id      String  @id @onCreate(cuid(2))
+  tenant  String
+  key     String
+  label   String?
+  actions Jsonb
+
+  @@unique([tenant, key])
+  @@index([tenant])
+}
+```
+
+The generated table is `"PolizyTuple"` with camelCase columns — the same layout as Prisma 6/7, so an existing Prisma 6/7 table can be reused.
+
+Configure `prisma.config.ts`:
+
+```ts
+import { definePrismaConfig } from "@prisma/cli-engine";
+import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
+
+export default definePrismaConfig({
+  orm: ormConfig({
+    contract: "./src/prisma/contract.prisma",
+    db: { connection: process.env.DATABASE_URL! },
+  }),
+});
+```
+
+Emit the contract types/JSON and update the database:
+
+```bash
+npx prisma contract emit
+npx prisma db update   # also creates the tables in an empty database
+```
+
+Instantiate the client and adapter:
+
+```ts
+import postgres from "@prisma/orm-postgres/runtime";
+import { contractFromJson } from "@prisma/orm-postgres/static";
+import { PrismaAdapter, PrismaRoleCatalog } from "polizy/prisma-storage";
+import type { Contract } from "./prisma/contract.d.ts";
+import contractJson from "./prisma/contract.json" with { type: "json" };
+
+const db = postgres({
+  contract: contractFromJson<Contract>(contractJson),
+  url: process.env.DATABASE_URL,
+});
+const storage = PrismaAdapter(db, { snapshotIsolationLevel: "RepeatableRead" });
+const catalog = PrismaRoleCatalog(db);
+```
+
+- `transactionOptions.timeout` is passed through; Prisma 8 has no `maxWait` (ignored).
+- `snapshotIsolationLevel` is honored from `@prisma/orm-postgres` `8.0.0-rc.25`. Earlier RCs (such as `rc.21`) silently ignore it, so `withSnapshot` runs at `READ COMMITTED` there.
 
 ## Optional: Role Catalog Table (0.5.0)
 
@@ -364,37 +475,41 @@ function getAuthzForTenant(tenantId: string) {
 
 ## Transactions
 
-The Prisma adapter supports transactions automatically:
+On a root client, `write()` is atomic (Prisma 6/7 batch `$transaction`; Prisma 8
+`db.transaction`), and `withSnapshot` opens its own interactive transaction on
+a separate connection using `snapshotIsolationLevel` and `transactionOptions`.
+
+To run authorization reads and writes inside your **own** transaction — sharing
+its isolation level, uncommitted writes, and session settings (`SET LOCAL` /
+`set_config` for RLS) — pass the transaction client `tx` to `PrismaAdapter(tx)`
+(and `PrismaRoleCatalog(tx)` if using runtime roles):
 
 ```typescript
-// Write operations are transactional
-await authz.allow({
-  who: user,
-  toBe: "owner",
-  onWhat: doc
-});
-
-// For multi-operation transactions, use Prisma's $transaction
+// Prisma 6 / 7
 await prisma.$transaction(async (tx) => {
-  // Create document
-  const doc = await tx.document.create({ data: { ... } });
-
-  // Grant permission manually using tx. Upsert (not create) to stay idempotent
-  // and avoid tripping the @@unique constraint on re-runs.
-  const key = {
-    subjectType: "user",
-    subjectId: userId,
-    relation: "owner",
-    objectType: "document",
-    objectId: doc.id,
-  };
-  await tx.polizyTuple.upsert({
-    where: { subjectType_subjectId_relation_objectType_objectId: key },
-    create: key,
-    update: {},
-  });
+  const authz = new AuthSystem({ storage: PrismaAdapter(tx), schema });
+  const doc = await tx.document.create({ data: { /* ... */ } });
+  await authz.allow({ who: user, toBe: "owner", onWhat: { type: "document", id: doc.id } });
+  if (!(await authz.check({ who: user, canThey: "edit", onWhat: doc, consistency: "strong" }))) {
+    throw new Error("forbidden");
+  }
 });
+
+// Prisma 8
+await db.transaction(async (tx) => {
+  const authz = new AuthSystem({ storage: PrismaAdapter(tx), schema });
+  if (!(await authz.check({ who, canThey: "edit", onWhat }))) {
+    throw new Error("forbidden");
+  }
+  // ... your writes on tx
+}, { isolationLevel: "RepeatableRead", timeout: 10000 });
 ```
+
+When given a transaction client:
+
+- **No `withSnapshot`:** `consistency: "strong"` runs directly on `tx` instead of opening a separate connection.
+- **Sequential writes on `tx`:** `write()` runs its upserts in sequence on the caller's transaction, so they commit or roll back atomically with it. (In 0.6.x, `PrismaAdapter(tx)` threw `p.$transaction is not a function` on Prisma 6 and used `tx.$transaction([...])` on Prisma 7, which escaped caller rollbacks; both are fixed in 0.7.0.)
+- **Detection:** Prisma marks its own transaction clients (Prisma 6/7: an internal transaction symbol; Prisma 8: the `invalidated` flag on `tx`), and polizy treats a client with that mark as a transaction client. Any other client (a root client, an `$extends` client, or your own wrapper) is a root client: writes run in one transaction through its `$transaction` / `transaction()`, and it gets `withSnapshot`. Pass Prisma's `tx` itself, not a wrapper around it. An object that is neither (no transaction mark and no `$transaction` / `transaction()` method) is rejected when the adapter is created, because its writes could not be atomic.
 
 ## Troubleshooting
 

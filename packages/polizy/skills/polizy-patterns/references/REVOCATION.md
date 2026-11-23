@@ -478,6 +478,58 @@ async function auditedRevoke(
 }
 ```
 
+## Concurrent Revocation: "Pin the Path"
+
+If a check passes and a concurrent revocation commits before your protected
+action commits, the action can run on access that no longer exists. Because
+`polizy` is grants-only, access can disappear only if a tuple is deleted or its
+`condition` changes (or if time passes `validUntil`).
+
+Inside the transaction that performs the action, pin the granting path with
+row locks (`FOR SHARE`) before acting:
+
+1. **Bind the adapter to the transaction:**
+   `new AuthSystem({ storage: PrismaAdapter(tx), schema })`.
+2. **Explain the check:**
+   `const { allowed, via } = await authz.explain({ who, canThey, onWhat })`. If `!allowed`, stop.
+3. **Collect the path's stored tuple IDs**, skipping contextual tuples (ids `ctx:0`, `ctx:1`, …):
+   ```typescript
+   import type { ExplainNode } from "polizy";
+
+   function pathTupleIds(node?: ExplainNode): string[] {
+     if (!node) return [];
+     const own = "tuple" in node && !node.tuple.id.startsWith("ctx:") ? [node.tuple.id] : [];
+     return "via" in node ? [...own, ...pathTupleIds(node.via)] : own;
+   }
+   ```
+4. **Lock those rows `FOR SHARE`:**
+   ```typescript
+   // Prisma 6/7 (other drivers: run the same SELECT ... FOR SHARE SQL).
+   // `Prisma` comes from @prisma/client, or from your generated client on Prisma 7.
+   const ids = pathTupleIds(via ?? undefined);
+   const locked = ids.length // empty only if every step was a contextual tuple
+     ? await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "PolizyTuple" WHERE id IN (${Prisma.join(ids)}) FOR SHARE`
+     : [];
+   ```
+   A concurrent `DELETE` (revoke) or `UPDATE` (condition change) on those rows
+   now blocks until this transaction ends. Use `FOR SHARE`, not `FOR KEY SHARE`:
+   `FOR KEY SHARE` does not block an `UPDATE` of non-key columns such as `condition`.
+5. **Re-verify after locking:**
+   - **Under `READ COMMITTED`:** run `explain()` again and verify it is still
+     `allowed` and all of its path IDs are in the locked IDs (a row deleted
+     between step 2 and step 4 is absent from the lock query; an updated row
+     returns with its new `condition`). If not, retry from step 2 (bounded) or deny.
+   - **Under `REPEATABLE READ`:** a row modified after the snapshot causes
+     `FOR SHARE` to fail with a serialization error (`SQLSTATE 40001`); retry the transaction.
+6. **Perform the action and commit.** Pending revocations on the pinned rows
+   proceed after the commit.
+
+**Limits:**
+
+- Only the path `explain()` returned is pinned (access holds while that path holds).
+- Time conditions cannot be locked; compare `validUntil` against the action's own timestamp if required.
+- Requires a database with row locks (PostgreSQL, MySQL); not SQLite.
+
 ## Best Practices
 
 1. **Clean up on delete** - Remove permissions when deleting resources

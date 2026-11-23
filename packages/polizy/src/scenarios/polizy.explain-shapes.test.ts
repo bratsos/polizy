@@ -38,16 +38,16 @@ describe("explain-shapes", () => {
 
   it("1. Multi-hop nested group", async () => {
     // alice member g1, g1 member g2, g2 viewer doc -> explain(alice, view, doc)
-    await authz.allow({
+    const grant = await authz.allow({
       who: { type: "group", id: "g2" },
       toBe: "viewer",
       onWhat: { type: "document", id: "doc" },
     });
-    await authz.addMember({
+    const g1InG2 = await authz.addMember({
       member: { type: "group", id: "g1" },
       group: { type: "group", id: "g2" },
     });
-    await authz.addMember({
+    const aliceInG1 = await authz.addMember({
       member: { type: "user", id: "alice" },
       group: { type: "group", id: "g1" },
     });
@@ -63,13 +63,16 @@ describe("explain-shapes", () => {
       kind: "group",
       relation: "member",
       through: { type: "group", id: "g1" },
+      tuple: aliceInG1,
       via: {
         kind: "group",
         relation: "member",
         through: { type: "group", id: "g2" },
+        tuple: g1InG2,
         via: {
           kind: "direct",
           relation: "viewer",
+          tuple: grant,
         },
       },
     });
@@ -77,16 +80,16 @@ describe("explain-shapes", () => {
 
   it("2. Hierarchy + group combined", async () => {
     // alice member team, team viewer folder, doc parent folder (hierarchyPropagation view->view)
-    await authz.allow({
+    const grant = await authz.allow({
       who: { type: "group", id: "team" },
       toBe: "viewer",
       onWhat: { type: "folder", id: "folder" },
     });
-    await authz.addMember({
+    const membership = await authz.addMember({
       member: { type: "user", id: "alice" },
       group: { type: "group", id: "team" },
     });
-    await authz.setParent({
+    const link = await authz.setParent({
       child: { type: "document", id: "doc" },
       parent: { type: "folder", id: "folder" },
     });
@@ -103,13 +106,16 @@ describe("explain-shapes", () => {
       kind: "group",
       relation: "member",
       through: { type: "group", id: "team" },
+      tuple: membership,
       via: {
         kind: "hierarchy",
         relation: "parent",
         parent: { type: "folder", id: "folder" },
+        tuple: link,
         via: {
           kind: "direct",
           relation: "viewer",
+          tuple: grant,
         },
       },
     });
@@ -117,7 +123,7 @@ describe("explain-shapes", () => {
 
   it("3. Field-level", async () => {
     // grant viewer on base "d1", explain(who, view, {document, "d1#title"})
-    await authz.allow({
+    const grant = await authz.allow({
       who: { type: "user", id: "alice" },
       toBe: "viewer",
       onWhat: { type: "document", id: "d1" },
@@ -136,13 +142,14 @@ describe("explain-shapes", () => {
       via: {
         kind: "direct",
         relation: "viewer",
+        tuple: grant,
       },
     });
   });
 
   it("4. Wildcard", async () => {
     // everyone("user") viewer doc -> explain(concrete user)
-    await authz.allow({
+    const grant = await authz.allow({
       who: everyone("user"),
       toBe: "viewer",
       onWhat: { type: "document", id: "doc" },
@@ -158,12 +165,13 @@ describe("explain-shapes", () => {
     assert.deepEqual(r.via, {
       kind: "wildcard",
       relation: "viewer",
+      tuple: grant,
     });
   });
 
   it("5. Conditioned grant honored/denied", async () => {
     // a viewer grant with attributes [{attribute:"dept", operator:"eq", value:"eng"}]
-    await authz.allow({
+    const grant = await authz.allow({
       who: { type: "user", id: "alice" },
       toBe: "viewer",
       onWhat: { type: "document", id: "doc" },
@@ -190,6 +198,7 @@ describe("explain-shapes", () => {
     assert.deepEqual(rHonored.via, {
       kind: "direct",
       relation: "viewer",
+      tuple: grant,
     });
 
     assert.equal(rDenied.allowed, false);

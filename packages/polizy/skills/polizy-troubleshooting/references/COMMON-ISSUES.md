@@ -758,3 +758,48 @@ In version 0.5.0 and earlier, malformed condition structures inside the database
 ### Fix
 
 In version 0.6.0, condition shape validation is hardened (`isConditionValid`). Any malformed condition shape will now fail closed (evaluation returns `false`, denying access) instead of crashing mid-check. Ensure your conditions are clean and follow the correct `Condition` schema to avoid silent denials.
+
+---
+
+## Issue 18: Strong Check Inside Transaction Does Not See My Writes or RLS
+
+### Symptom
+
+Inside `prisma.$transaction` or `db.transaction` (or after `SET LOCAL` / `set_config(..., true)`), calling `authz.check({ ..., consistency: "strong" })` does not see uncommitted grants written in the same transaction, or fails under PostgreSQL Row-Level Security (RLS).
+
+### Cause
+
+`authz` is backed by a root-client adapter (`PrismaAdapter(prisma)` or `PrismaAdapter(db)`). On a root client, `consistency: "strong"` runs inside `withSnapshot`, which opens a **new** interactive transaction on a different connection. That connection cannot see uncommitted writes or session-local settings (`SET LOCAL` / `set_config`) from the caller's transaction.
+
+### Fix
+
+Bind the adapter to the transaction client (`PrismaAdapter(tx)`) inside your transaction callback:
+
+```typescript
+await prisma.$transaction(async (tx) => {
+  const txAuthz = new AuthSystem({ storage: PrismaAdapter(tx), schema });
+  await txAuthz.allow({ who, toBe: "viewer", onWhat });
+  const ok = await txAuthz.check({ who, canThey: "view", onWhat, consistency: "strong" }); // true
+});
+```
+
+With a transaction client, the adapter has no `withSnapshot`, so `"strong"` checks and all reads/writes run directly on `tx`. Under `REPEATABLE READ`, the caller's transaction provides one snapshot; under `READ COMMITTED`, each statement sees the latest commits (pass `preload: true` for a single statement-level snapshot).
+
+---
+
+## Issue 19: Writes From PrismaAdapter(tx) Survived a Rollback on Prisma 7 (Fixed in 0.7.0)
+
+### Symptom (0.6.x)
+
+In 0.6.x:
+
+- On **Prisma 6**, passing a transaction client `PrismaAdapter(tx)` threw `p.$transaction is not a function` on `write()` and on `consistency: "strong"` reads.
+- On **Prisma 7**, `write()` called `tx.$transaction([...])` (the batch form), which Prisma 7 runs as its own transaction — so grants written through `PrismaAdapter(tx)` stayed committed even when the caller's outer `$transaction` rolled back.
+
+### Cause
+
+0.6.x assumed every client passed to `PrismaAdapter` was a root client with `$transaction`.
+
+### Fix
+
+**Upgrade to 0.7.0.** `PrismaAdapter(tx)` and `PrismaRoleCatalog(tx)` now recognise Prisma's transaction clients by the mark Prisma puts on them, run `write()` upserts sequentially on `tx` so they roll back with the caller's transaction, and omit `withSnapshot`. Pass Prisma's `tx` itself, not a wrapper around it.

@@ -4,7 +4,7 @@ description: Schema design guide for polizy authorization. Use when defining rel
 license: MIT
 metadata:
   author: bratsos
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/bratsos/polizy
 ---
 

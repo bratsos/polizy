@@ -73,20 +73,37 @@ const view = await authz.withReadScope(async (scope) => {
 Strong consistency is powered by the storage adapter's optional `withSnapshot` interface:
 
 *   **In-Memory Adapter**: Copies the internal tuple set when a snapshot is initiated, ensuring later updates are isolated.
-*   **Prisma Adapter**: Runs the entire check operation within a single database transaction. For PostgreSQL (which supports Multi-Version Concurrency Control, or MVCC), you should configure the adapter with `RepeatableRead` isolation to prevent writers from blocking readers and vice-versa. You can also customize transaction timing using `transactionOptions`:
+*   **Prisma Adapter**: On a root client, `withSnapshot` runs the check operation inside a new interactive database transaction on a separate connection. For PostgreSQL (which supports Multi-Version Concurrency Control, or MVCC), configure the adapter with `RepeatableRead` isolation so readers never block writers and writers never block readers. You can also customize transaction timing using `transactionOptions`:
     ```ts
     import { PrismaAdapter } from "polizy/prisma-storage";
 
     const storage = PrismaAdapter(prisma, { 
       snapshotIsolationLevel: "RepeatableRead",
       transactionOptions: {
-        maxWait: 5000,
+        maxWait: 5000, // Prisma 6/7 only; ignored on Prisma 8
         timeout: 10000,
       }
     });
     ```
-    For SQLite, this configuration can be omitted, as SQLite default read transactions behave as snapshots out of the box. For setup details and transaction timeout customization, see the **[Prisma Storage](../storage/prisma.md#customizing-transaction-timeouts)** guide.
-*   **Fallback Behavior**: If a storage adapter does not implement `withSnapshot`, polizy will automatically and transparently fall back to live reads.
+    On Prisma 8, `snapshotIsolationLevel` requires `@prisma/orm-postgres` `8.0.0-rc.25` or later; earlier release candidates ignore it and run `withSnapshot` at `READ COMMITTED`. For SQLite, leave `snapshotIsolationLevel` unset because SQLite read transactions are already snapshots. For setup details, see **[Prisma Storage](../storage/prisma.md#customizing-transaction-timeouts)**.
+
+    :::warning[Strong Consistency with RLS and Uncommitted Writes]
+
+    Because `withSnapshot` on a root-client adapter opens a **separate transaction** on a different connection, it does not see your caller's uncommitted writes and does not inherit transaction-local RLS settings (`SET LOCAL` or `set_config(..., true)`).
+
+    To run checks inside your own transaction, pass the transaction client directly: `PrismaAdapter(tx)`. The adapter then omits `withSnapshot`, so `consistency: "strong"` runs on your transaction. A `REPEATABLE READ` caller transaction gives one snapshot; a `READ COMMITTED` caller transaction sees the latest commits per statement (combine with `preload: true` if you need one read).
+
+    :::
+
+*   **Fallback Behavior**: If a storage adapter does not implement `withSnapshot`, polizy falls back to reads on the adapter directly when `consistency: "strong"` is requested.
+
+---
+
+## Single-Read Preloading (`preload: true`)
+
+Passing `preload: true` fetches every tuple the adapter can see in a single `findTuples({})` call and resolves the check in memory. Because there is only one storage query, the entire operation sees one statement-level snapshot even under `READ COMMITTED`.
+
+The tradeoff is memory and bandwidth: `preload: true` loads every visible tuple. It works well when row-level security (RLS) or a tenant-scoped store keeps the visible set small, and poorly on a large unpartitioned shared table.
 
 ---
 
@@ -105,7 +122,7 @@ await authz.check({
 });
 ```
 
-These contextual tuples are evaluated in memory as if they were stored in the database. They bypass the storage round-trip entirely. To learn more, read the **[Read-Your-Writes Guide](../guides/read-your-writes.md)**.
+These contextual tuples are merged with stored tuples for that one call and evaluated in memory as if they were stored in the database. They do **not** replace or bypass storage reads — a check with only contextual tuples still reads storage. To learn more, read the **[Read-Your-Writes Guide](../guides/read-your-writes.md)**.
 
 ---
 

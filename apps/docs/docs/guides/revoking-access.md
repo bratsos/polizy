@@ -110,3 +110,60 @@ await authz.removeParent({
 ```
 
 :::
+
+---
+
+## 4. Preventing the In-Flight Revocation Race ("Pin the Path")
+
+If a permission check passes and a concurrent revocation commits before your protected action commits, the action runs on access that no longer exists.
+
+Because polizy is grants-only, access can only disappear when a tuple in the granting path is deleted, its `condition` is changed, or time passes its `validUntil`. You can close this window by pinning the granting path's tuple rows inside the transaction that performs the action:
+
+1. **Bind the adapter to the action transaction**:
+   ```ts
+   const authz = new AuthSystem({ storage: PrismaAdapter(tx), schema });
+   ```
+2. **Run `explain` to get the granting path**:
+   ```ts
+   const { allowed, via } = await authz.explain({ who, canThey, onWhat });
+   if (!allowed) throw new Error("forbidden");
+   ```
+3. **Collect the stored tuple IDs from the path**, skipping any contextual tuples (`ctx:`):
+   ```ts
+   import type { ExplainNode } from "polizy";
+   function pathTupleIds(node?: ExplainNode): string[] {
+     if (!node) return [];
+     const own = "tuple" in node && !node.tuple.id.startsWith("ctx:") ? [node.tuple.id] : [];
+     return "via" in node ? [...own, ...pathTupleIds(node.via)] : own;
+   }
+   ```
+4. **Lock those rows `FOR SHARE`**:
+   ```ts
+   import { Prisma } from "@prisma/client"; // Prisma 7 with the prisma-client generator: import from your generated client
+
+   const ids = pathTupleIds(via ?? undefined);
+   // Empty only when every step came from contextualTuples: nothing to lock.
+   const locked = ids.length
+     ? await tx.$queryRaw<{ id: string }[]>`
+         SELECT id FROM "PolizyTuple" WHERE id IN (${Prisma.join(ids)}) FOR SHARE
+       `
+     : [];
+   ```
+   Use the same SQL with any SQL driver. A concurrent `DELETE` (revocation) or `UPDATE` (condition change) on those rows now waits until this transaction ends.
+
+   :::warning[Use `FOR SHARE`, not `FOR KEY SHARE`]
+
+   `FOR KEY SHARE` does not block an `UPDATE` of non-key columns such as `condition`. Always use `FOR SHARE`.
+
+   :::
+
+5. **Re-verify after acquiring the lock**:
+   * **Under `READ COMMITTED`**: a revocation or condition change may have committed between step 2 and step 4. A deleted row is omitted from the `SELECT ... FOR SHARE` result, and an updated row is returned with its new condition. Run `explain` again and verify that `allowed` is still `true` and every ID returned by `pathTupleIds` is in the locked set. If not, retry from step 2 (bounded) or deny.
+   * **Under `REPEATABLE READ`**: if any pinned row changed after the snapshot started, `FOR SHARE` fails with a serialization error (SQLSTATE `40001`). Retry the transaction.
+6. **Perform the action and commit**. Concurrent revocations on the pinned rows proceed after the commit.
+
+### Limits of Pinning
+
+* Only the single path returned by `explain` is pinned. That is sufficient because access holds while that path holds.
+* Time-based conditions cannot be locked at the row level. Compare `validUntil` against the action's own timestamp if expiry during the transaction matters.
+* Requires a database that supports row-level shared locks (such as PostgreSQL or MySQL). SQLite does not support `FOR SHARE`.

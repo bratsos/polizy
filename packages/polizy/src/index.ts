@@ -5,7 +5,7 @@
 export { isConditionValid } from "./conditions";
 export * from "./polizy";
 export { InMemoryStorageAdapter } from "./polizy.in-memory.storage";
-export type { StorageAdapter } from "./polizy.storage";
+export type { ReadOnlyStorage, StorageAdapter } from "./polizy.storage";
 export type {
   PermissionMatrix,
   RoleCatalogRecord,
@@ -41,6 +41,7 @@ export type {
   ListAccessibleObjectsArgs,
   ListAccessibleObjectsResult,
   Logger,
+  Relation,
   RoleScaffoldMeta,
   SchemaActions,
   SchemaObjectTypes,

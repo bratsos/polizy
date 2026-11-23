@@ -101,8 +101,28 @@ export class MyCustomStorageAdapter implements StorageAdapter {
 ```
 
 :::note
-The `StorageAdapter` interface carries an optional `@internal` phantom `_types` marker as a compile-time variance device. Custom adapters do not need to implement or define this property.
+`ReadOnlyStorage` and `Relation` are exported as types from `"polizy"` alongside `StorageAdapter`, `InputTuple`, `StoredTuple`, `Subject`, and `AnyObject`.
+
+The `StorageAdapter` interface also carries an optional `@internal` phantom `_types` marker as a compile-time variance device. Custom adapters do not need to implement or define this property.
 :::
+
+---
+
+## How the Engine Calls Your Adapter
+
+The polizy execution engine reads storage **only through `findTuples`**. It never calls `findSubjects` or `findObjects` on your adapter (both methods remain part of the `StorageAdapter` interface and are verified by the shared test suite).
+
+Writes call `write` and `delete`. Strong-consistency reads call `withSnapshot` when present.
+
+The engine sends `findTuples` only these five filter shapes:
+
+* `{ object }`
+* `{ subject, relation }`
+* `{ subject }`
+* `{ relation }`
+* `{}` (used by `preload: true`)
+
+`listTuples` passes the caller's filter plus `limit` and `offset`.
 
 ---
 
@@ -136,19 +156,19 @@ If your database supports repeatable reads or snapshot isolation (like PostgreSQ
 - It must initialize a read-only transaction or snapshot.
 - It must execute the callback `fn`, passing it a `reader` object which implements `findTuples`, `findSubjects`, and `findObjects` resolved against that snapshot.
 - If you do not implement this, polizy will automatically fall back to live reads when users ask for `consistency: "strong"`.
+- If your adapter wraps a caller's active transaction, omit `withSnapshot` so `consistency: "strong"` reads stay on that transaction instead of starting a separate one.
 
 ### 4. Find Tuples Condition Filtering
 When filtering tuples via `findTuples()`, if the `condition` key is explicitly present in the query object but its value is `undefined` (e.g., `{ subject: ..., condition: undefined }`), the adapter must apply **no** condition constraint. This means it must return matching tuples both with and without conditions, rather than filtering to only tuples where the condition is null.
 
 ### 5. Index both hot read paths (required for performance)
 
-polizy reads tuples two ways, and **both must be indexed** or list operations
-degrade to full table scans at scale:
+polizy reads tuples through `findTuples` with subject-anchored (`{ subject, relation }`, `{ subject }`) and object-anchored (`{ object }`) filters. **Both paths must be indexed** or checks and list operations degrade to full table scans at scale:
 
-- **Subject-anchored:** `WHERE subjectType = ? AND subjectId = ? AND relation = ?` — "which groups is this subject in?", "what is this object's parent?" (the `check` walk's membership and hierarchy hops), and the bare `subjectType, subjectId` form for `listAccessibleObjects`.
-- **Object-anchored:** `WHERE objectType = ? AND objectId = ?` — "who holds this object?" (the `check` walk's direct-grant lookup, `findSubjects`, reverse expansion, and the `listSubjects` / `listAccessibleObjects` gather).
+- **Subject-anchored:** `(subjectType, subjectId, relation)` serves `{ subject, relation }` and `{ subject }` lookups (group membership, hierarchy hops, and `listAccessibleObjects`).
+- **Object-anchored:** `(objectType, objectId, relation)` serves `{ object }` lookups (direct grants, reverse expansion, `listSubjects`, and `listAccessibleObjects` gather).
 
-A common mistake is to rely on a single `UNIQUE (subjectType, subjectId, relation, objectType, objectId)` constraint: its left prefix serves subject-anchored reads, but object-anchored reads are **not** a prefix of it, so they fall back to a full scan. That makes every `check` (whose direct-grant read is object-anchored) and the list operations scale super-linearly with the table size. Add an explicit object index (the bundled Prisma adapter already ships both):
+A common mistake is to rely on a single `UNIQUE (subjectType, subjectId, relation, objectType, objectId)` constraint: its left prefix serves subject-anchored reads, but object-anchored reads are **not** a prefix of it, so they fall back to a full scan. Add both indexes explicitly (the bundled Prisma adapter ships both):
 
 ```sql
 CREATE INDEX polizy_tuple_subject_idx ON polizy_tuple (subject_type, subject_id, relation);
@@ -198,3 +218,12 @@ defineStorageAdapterTestSuite("MyCustomStorageAdapter", {
   }
 });
 ```
+
+In addition to basic write, read, and delete contracts, the 0.7.0 suite tests:
+
+* Full `condition` round-trip (`validSince`, `validUntil`, and `attributes`).
+* Re-writing an existing tuple without a `condition` preserves its existing condition.
+* Stable and complete `limit` and `offset` pagination.
+* `findTuples({})` returns every stored tuple.
+* `findSubjects` and `findObjects` both with and without a type filter.
+* `withSnapshot` (run only if implemented on the adapter) sees written tuples.

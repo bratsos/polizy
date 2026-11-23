@@ -4,7 +4,7 @@ description: Storage adapter setup for polizy authorization. Use when configurin
 license: MIT
 metadata:
   author: bratsos
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -45,6 +45,8 @@ const authz = new AuthSystem({ storage, schema });
 
 ### Prisma (Production)
 
+Supports Prisma 6, Prisma 7 (`@prisma/adapter-pg`), and Prisma 8 (`@prisma/orm-postgres`), and accepts either a root client or a transaction client (`tx`):
+
 ```typescript
 import { AuthSystem } from "polizy";
 import { PrismaAdapter } from "polizy/prisma-storage";
@@ -53,9 +55,15 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const storage = PrismaAdapter(prisma);
 const authz = new AuthSystem({ storage, schema });
+
+// Inside an interactive transaction (runs reads and writes on tx):
+await prisma.$transaction(async (tx) => {
+  const txAuthz = new AuthSystem({ storage: PrismaAdapter(tx), schema });
+  // ...
+});
 ```
 
-**Requires Prisma model** - see [PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md)
+**Requires Prisma model** (and `contract.prisma` on Prisma 8) - see [PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md)
 
 ## InMemoryStorageAdapter
 
@@ -119,22 +127,30 @@ describe("authorization", () => {
 ### Setup Steps
 
 1. **Install dependencies**
-   ```bash
-   npm install @prisma/client
-   npm install -D prisma
-   ```
+   - Prisma 6 or 7:
+     ```bash
+     npm install @prisma/client
+     npm install -D prisma
+     ```
+     (`@prisma/client` `^6.0.0 || ^7.0.0` is an optional peer dependency; Prisma 7 also uses a driver adapter such as `@prisma/adapter-pg` and Node 22.12+ or 24+.)
+   - Prisma 8 (no polizy peer dependency required):
+     ```bash
+     npm install @prisma/orm-postgres pg temporal-polyfill
+     npm install -D prisma @types/pg
+     ```
 
-2. **Add Prisma model** (see [PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md))
+2. **Add Prisma model** (see [PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md) for Prisma 6/7 `schema.prisma` and Prisma 8 `contract.prisma`)
 
 3. **Run migrations**
    ```bash
    npx prisma migrate dev --name add_polizy
+   # Prisma 8: npx prisma contract emit && npx prisma db update
    ```
 
 4. **Use adapter**
    ```typescript
    import { PrismaAdapter } from "polizy/prisma-storage";
-   const storage = PrismaAdapter(prisma);
+   const storage = PrismaAdapter(prisma); // or PrismaAdapter(db), or PrismaAdapter(tx)
    ```
 
 ## Storage Interface
@@ -166,11 +182,13 @@ interface StorageAdapter<S, O> {
 
   findSubjects(object, relation, options?: { subjectType?: S }): Promise<Subject<S>[]>;
   findObjects(subject, relation, options?: { objectType?: O }): Promise<AnyObject<O>[]>;
+
+  // Optional: pin a read operation to a single point-in-time snapshot.
+  withSnapshot?<T>(fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>): Promise<T>;
 }
 ```
 
-See [CUSTOM-ADAPTERS.md](references/CUSTOM-ADAPTERS.md) for the exact
-idempotent-write, delete, and pagination semantics every adapter must honor.
+Since 0.6.1, the engine reads storage exclusively through `findTuples`; `findSubjects` and `findObjects` remain part of `StorageAdapter` and the contract suite. `ReadOnlyStorage` is exported as a type from `polizy`. See [CUSTOM-ADAPTERS.md](references/CUSTOM-ADAPTERS.md) for the exact idempotent-write, delete, pagination, and snapshot semantics every adapter must honor.
 
 ## Role catalog (runtime roles)
 
@@ -203,10 +221,12 @@ const authz = new AuthSystem({ storage: PrismaAdapter(prisma), schema });
 const roles = new RoleRegistry(authz, schema, { catalog: PrismaRoleCatalog(prisma) });
 ```
 
-`PrismaRoleCatalog` needs the new optional `PolizyRole` Prisma model — see
-[PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md). The catalog is independent of
-the tuple `StorageAdapter`: you can pair an in-memory catalog with a Prisma
-adapter or vice versa, since the engine resolves roles purely from tuples.
+`PrismaRoleCatalog` needs the optional `PolizyRole` Prisma model — see
+[PRISMA-ADAPTER.md](references/PRISMA-ADAPTER.md). Like `PrismaAdapter`, it works
+with Prisma 6, 7, and 8 clients as well as transaction clients (`tx`). The catalog
+is independent of the tuple `StorageAdapter`: you can pair an in-memory catalog
+with a Prisma adapter or vice versa, since the engine resolves roles purely from
+tuples.
 
 ## Common Patterns
 
@@ -274,6 +294,8 @@ subject's reachable set rather than scanning the whole tuple table. See
 | Migration fails on the new `@@unique` | Dedupe 0.2.x and earlier duplicate rows first (see migration guide) |
 | Time-based grants threw on Prisma | Fixed in 0.3.0 — conditions revive `validSince`/`validUntil` to `Date` on read |
 | Revocation removed too much | Fixed in 0.3.0 — both adapters keep an explicit `who` and no longer over-delete |
+| Strong check in transaction misses writes / RLS | Root `withSnapshot` opens a new connection; pass `PrismaAdapter(tx)` instead |
+| `PrismaAdapter(tx)` escaped rollback on Prisma 7 | Fixed in 0.7.0 — `write()` runs sequentially on `tx` (and Prisma 6 no longer throws) |
 | Slow checks | Reduce group/hierarchy depth; index the two hot paths |
 | Memory growing | Clean up expired conditional tuples |
 

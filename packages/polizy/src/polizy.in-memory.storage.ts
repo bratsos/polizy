@@ -247,7 +247,12 @@ export class InMemoryStorageAdapter<
         // provided, so re-granting without a `when` preserves any existing
         // condition (matches the Prisma adapter). Revoke to clear it.
         if (inputTuple.condition !== undefined) {
-          existing.condition = inputTuple.condition;
+          // Replace, never mutate: tuples already returned (e.g. by explain())
+          // keep the condition they were read with. Indexes hold ids only.
+          const updated = { ...existing, condition: inputTuple.condition };
+          this.store.tuples.set(existing.id, updated);
+          result.push(updated);
+          continue;
         }
         result.push(existing);
         continue;
@@ -315,9 +320,8 @@ export class InMemoryStorageAdapter<
 
   /**
    * Run `fn` against a point-in-time copy of the store. A write that lands while
-   * `fn` is in flight mutates the live store (and can edit a live tuple's
-   * condition in place); cloning copies each tuple, so the operation sees one
-   * coherent view without blocking writers.
+   * `fn` is in flight changes the live store, not the copy, so the operation
+   * sees one coherent view without blocking writers.
    */
   async withSnapshot<T>(
     fn: (reader: ReadOnlyStorage<S, O>) => Promise<T>,

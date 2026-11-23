@@ -139,20 +139,41 @@ const explanation = await authz.explain({
 console.log(explanation);
 /*
 Output:
-{ 
-  allowed: true, 
-  via: { 
-    kind: "group", 
-    relation: "member", 
-    through: { type: "team", id: "alpha" }, 
-    via: { 
-      kind: "direct", 
-      relation: "viewer" 
-    } 
-  } 
+{
+  allowed: true,
+  via: {
+    kind: "group",
+    relation: "member",
+    through: { type: "team", id: "alpha" },
+    tuple: {
+      id: "1",
+      subject: { type: "user", id: "carol" },
+      relation: "member",
+      object: { type: "team", id: "alpha" }
+    },
+    via: {
+      kind: "direct",
+      relation: "viewer",
+      tuple: {
+        id: "2",
+        subject: { type: "team", id: "alpha" },
+        relation: "viewer",
+        object: { type: "document", id: "doc1" }
+      }
+    }
+  }
 }
 */
 ```
+
+Every `direct`, `wildcard`, `group`, and `hierarchy` node in `via` carries a `tuple: StoredTuple` field (`field` nodes have `base` and `via`, with no `tuple`):
+
+* `direct`: the grant tuple that matched.
+* `wildcard`: the `everyone(type)` grant tuple that matched.
+* `group`: the membership tuple (`subject -> group`) that was followed.
+* `hierarchy`: the parent-link tuple (`child -> parent`) that was followed.
+
+`tuple.id` is the stored row ID from the adapter (the in-memory adapter numbers rows `"1"`, `"2"`, …; Prisma uses cuids). A tuple supplied via `contextualTuples` has the synthetic ID `ctx:<index>`, its 0-based position in that array (`ctx:0`, `ctx:1`, …), and is not in storage.
 
 ---
 

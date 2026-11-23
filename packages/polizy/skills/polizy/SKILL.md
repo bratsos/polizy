@@ -4,7 +4,7 @@ description: Router for the polizy authorization library. Use when the user ment
 license: MIT
 metadata:
   author: bratsos
-  version: "0.6.0"
+  version: "0.7.0"
   repository: https://github.com/bratsos/polizy
 ---
 
@@ -50,16 +50,21 @@ so multi-version jumps work.
 | **Action** | Intent: `view`, `edit`, `delete` — mapped to relations |
 | **Condition** | Optional time window (`validSince`/`validUntil`) and/or attribute predicates (ABAC) |
 
-## Capabilities (0.6.x)
+## Capabilities (0.7.x)
 
 - **Checks & queries:** `check`, `checkMany` (batch), `checkOrThrow`, `explain`
-  (why allowed/denied; now accepts an optional 2nd arg and never throws `MaxDepthExceededError`),
+  (why allowed/denied; accepts an optional 2nd arg, never throws `MaxDepthExceededError`, and includes `tuple: StoredTuple` on `direct`, `wildcard`, `group`, and `hierarchy` nodes),
   `listAccessibleObjects` (paginated), `listSubjects` (paginated via `limit`/`offset` after deterministic sort),
   `someoneCan` (existence; short-circuits), `countSubjects` / `countAccessibleObjects` (always unpaginated),
   `listTuples` (paginated). All public and `ReadScope` queries accept uniform `ReadOptions`
   (`consistency`, `preload`, and `contextualTuples`). Note that `checkMany` shares contextual tuples batch-wide (per-request not supported),
   and `withReadScope` operations accept no per-operation read options.
-- **Contract Test Suite:** Validate custom adapters using the published `polizy/storage-tests` suite.
+- **Prisma 6, 7 & 8 + transaction clients:** `PrismaAdapter` and `PrismaRoleCatalog`
+  (`polizy/prisma-storage`) accept Prisma 6, Prisma 7 (`@prisma/adapter-pg`), and
+  Prisma 8 (`@prisma/orm-postgres`) root clients as well as interactive transaction
+  clients (`tx`).
+- **Types & contract test suite:** `ReadOnlyStorage` and `Relation` are exported as
+  types from `polizy`; validate custom adapters using `polizy/storage-tests`.
 - **Writes (idempotent):** `allow`, `allowMany`, `disallowAllMatching`,
   `addMember`/`removeMember`, `setParent`/`removeParent`. Use `as` to pick a
   relation when the schema declares more than one group/hierarchy relation.
