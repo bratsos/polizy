@@ -1,7 +1,7 @@
 {
   "name": "polizy-prisma8-tests",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Runs polizy's Prisma adapter against Prisma 8 (@prisma/orm-postgres) on PostgreSQL.",
   "type": "module",
   "scripts": {
